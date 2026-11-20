@@ -101,8 +101,8 @@ describe('macOS running processes', () => {
 describe('Safari cannot be split by app on macOS', () => {
   const SAFARI = '/Applications/Safari.app/Contents/MacOS/Safari';
   it('names Safari (and its preview) as not splittable, nothing else', () => {
-    expect(unsplittableReason(SAFARI)).toBe(SAFARI_SPLIT_COPY);
-    expect(unsplittableReason('/Applications/Safari Technology Preview.app/Contents/MacOS/Safari Technology Preview')).toBe(SAFARI_SPLIT_COPY);
+    expect(unsplittableReason(SAFARI)).toBe(SAFARI_SPLIT_COPY());
+    expect(unsplittableReason('/Applications/Safari Technology Preview.app/Contents/MacOS/Safari Technology Preview')).toBe(SAFARI_SPLIT_COPY());
     expect(unsplittableReason(FF)).toBeNull();
     expect(unsplittableReason('C:\Program Files\Safari\Safari.exe')).toBeNull();
   });

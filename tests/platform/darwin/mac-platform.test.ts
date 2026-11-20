@@ -281,7 +281,9 @@ describe('device address without the secret', () => {
     expect(s).toContain('key list --instance "$INSTANCE" --home');
     expect(s).not.toContain('keys list');
     expect(s).toContain('chmod 600 "$HOME_DIR/device.pub"');
-    expect(s).toMatch(/device\.pub.*chmod \+a "user:\$USER_NAME allow read,readattr" "\$HOME_DIR\/device\.pub"/);
+    // AUDIT M3: the read ACE goes through _lib.sh add_ace (chmod +a "user:$USER_NAME allow $1"), never chmod -N.
+    expect(s).toMatch(/device\.pub.*add_ace 'read,readattr' "\$HOME_DIR\/device\.pub"/);
+    expect(fs.readFileSync('resources/scripts/_lib.sh', 'utf8')).toMatch(/chmod \+a "user:\$USER_NAME allow \$1"/);
     expect(s).toMatch(/chown -R root:wheel "\$k"; chmod -R go-rwx "\$k"/);
   });
   it('doctor-clean modes: home 0750, config subdirs 0700, config.toml 0600 (user reaches them by ACL)', () => {

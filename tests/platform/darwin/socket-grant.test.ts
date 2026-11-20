@@ -19,7 +19,12 @@ describe('grant-socket step', () => {
 
   it('never clears an ACL, so the account that ran setup keeps access', () => {
     expect(code).not.toMatch(/chmod\s+-N/);
-    expect(code).toMatch(/chmod \+a "user:\$USER_NAME allow \$1"/);
+    // AUDIT M3: add_ace lives in _lib.sh (shared with setup-daemon.sh); grant-socket sources it and grants through it.
+    const lib = fs.readFileSync('resources/scripts/_lib.sh', 'utf8').split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+    expect(lib).not.toMatch(/chmod\s+-N/);
+    expect(lib).toMatch(/chmod \+a "user:\$USER_NAME allow \$1"/);
+    expect(script).toMatch(/source "\$HERE\/_lib\.sh"/);
+    expect(code).toMatch(/add_ace '[a-z,_]+' "\$HOME_DIR"/);
   });
 
   it('checks the home, the user (never root) and the group before it changes anything', () => {
