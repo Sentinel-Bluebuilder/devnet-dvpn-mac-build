@@ -1,0 +1,9 @@
+# #33 macOS: shared-folder files of #31 7e1f303 that differ here, one `path | reason` per line (scripts/parity.mjs --strict).
+# Each test below pins Windows-only code that lives in a PLATFORM file; it belongs in #31 tests/platform/win32 (E-60).
+tests/unit/app-user-account.test.ts | Windows DOMAIN\user + the PowerShell elevatedArgLine; macOS uses loginName() and helperArgs (tests/platform/darwin/login-name.test.ts)
+tests/unit/sc-language.test.ts | parses sc.exe output (parseTunnelServices); macOS has no sc.exe, tunnels come from wg-quick name files + ifconfig
+tests/unit/restore-openvpn-leftover.test.ts | Windows tasklist parser + U-27b; macOS openvpnRunning() is false because ps already shows dvpnd's openvpn in leftoverTunnels()
+tests/unit/cli-drivers-tail.test.ts | pins Windows DRIVER_LABELS (platform drivers.ts); same check with macOS labels in tests/platform/darwin/cli-drivers-tail.test.ts
+tests/unit/device-topup-once.test.ts | its E13 block greps Windows' post-apply start in daemon/settings.ts; macOS copy without E13 in tests/platform/darwin/device-topup-once.test.ts
+src/shared/i18n/locales/en/main.json | regenerated here by scripts/i18n-extract.mjs (E-67, lead order rc.7): #31's copy carries 42 sentences from the Windows platform layer that this source does not have, so the i18n-gates "English chunks up to date" test failed; goes away with per-platform chunks
+src/cli/daemon-cmd.ts | macOS twin of Linux RC8 W47 (T-C row 17): doctor prepends a LaunchDaemon service row (src/core/daemon/darwin-launchd.ts, read by src/main/daemon/launchd-state.ts); off macOS the rows are unchanged

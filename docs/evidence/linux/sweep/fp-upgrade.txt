@@ -1,0 +1,26 @@
+== package
+devnet-dvpn-linux 0.1.0 install ok installed
+== files
+/etc/apparmor.d/devnet-dvpn
+/etc/systemd/system/dvpnd-client.service
+/opt/devnet-dvpn
+/usr/bin/devnet-dvpn
+/usr/bin/devnet-dvpn-desktop
+/usr/local/lib/devnet-dvpn
+/usr/share/polkit-1/actions/network.sentinel.devnet-dvpn.policy
+/var/lib/devnet-dvpn
+/var/lib/dvpnd/client
+== service
+active
+enabled
+== apparmor
+1
+== group
+dvpn:x:988:ubuntu
+== nft
+== links
+== rules
+== procs
+48263 /usr/local/lib/devnet-dvpn/dvpnd start --home /var/lib/dvpnd/client
+== egress
+34.123.93.65

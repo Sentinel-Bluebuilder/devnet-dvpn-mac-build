@@ -1,0 +1,293 @@
+== package
+devnet-dvpn-linux 0.1.0 install ok installed
+== files
+/etc/apparmor.d/devnet-dvpn
+/etc/systemd/system/dvpnd-client.service
+/opt/devnet-dvpn
+/usr/bin/devnet-dvpn
+/usr/bin/devnet-dvpn-desktop
+/usr/local/lib/devnet-dvpn
+/usr/share/polkit-1/actions/network.sentinel.devnet-dvpn.policy
+/var/lib/devnet-dvpn
+/var/lib/dvpnd/client
+== service
+active
+enabled
+== apparmor
+1
+== group
+dvpn:x:988:ubuntu,ddvdesk
+== nft
+== links
+== rules
+== procs
+79926 /usr/local/lib/devnet-dvpn/dvpnd start --home /var/lib/dvpnd/client
+== egress
+34.123.93.65
+
+### before: service active
+$ has before ^active$
+
+(exit 0)
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following packages were automatically installed and are no longer required:
+  bpfcc-tools bpftrace hwdata ieee-data libbpfcc libclang-cpp18 libclang1-18
+  libdebuginfod-common libdebuginfod1t64 libllvm18 libllvm19
+  linux-tools-common python3-bpfcc python3-netaddr ubuntu-kernel-accessories
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 1 reinstalled, 0 to remove and 12 not upgraded.
+Need to get 0 B/129 MB of archives.
+After this operation, 0 B of additional disk space will be used.
+Get:1 /home/ubuntu/ddvl/dist/devnet-dvpn_0.1.0_amd64.deb devnet-dvpn-linux amd64 0.1.0 [129 MB]
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 133103 files and directories currently installed.)
+Preparing to unpack .../devnet-dvpn_0.1.0_amd64.deb ...
+Unpacking devnet-dvpn-linux (0.1.0) over (0.1.0) ...
+Setting up devnet-dvpn-linux (0.1.0) ...
+migrate-daemon-config: 0 file(s) changed
+Processing triggers for desktop-file-utils (0.27-2build1) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
+Processing triggers for gnome-menus (3.36.0-1.1ubuntu3) ...
+Processing triggers for bamfdaemon (0.5.6+22.04.20220217-0ubuntu5) ...
+Rebuilding /usr/share/applications/bamf-2.index...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+== package
+devnet-dvpn-linux 0.1.0 install ok installed
+== files
+/etc/apparmor.d/devnet-dvpn
+/etc/systemd/system/dvpnd-client.service
+/opt/devnet-dvpn
+/usr/bin/devnet-dvpn
+/usr/bin/devnet-dvpn-desktop
+/usr/local/lib/devnet-dvpn
+/usr/share/polkit-1/actions/network.sentinel.devnet-dvpn.policy
+/var/lib/devnet-dvpn
+/var/lib/dvpnd/client
+== service
+active
+enabled
+== apparmor
+1
+== group
+dvpn:x:988:ubuntu,ddvdesk
+== nft
+== links
+== rules
+== procs
+81000 /usr/local/lib/devnet-dvpn/dvpnd start --home /var/lib/dvpnd/client
+== egress
+34.123.93.65
+
+### upgrade: service still active
+$ has upgrade ^active$
+
+(exit 0)
+
+### upgrade: service dvpnd = packaged dvpnd
+$ bash -c [ "$(sha256sum < /usr/local/lib/devnet-dvpn/dvpnd)" = "$(sha256sum < /opt/devnet-dvpn/resources/resources/bin/dvpnd)" ]
+
+(exit 0)
+
+### upgrade: AppArmor profile loaded
+$ bash -c sudo aa-status | grep -q devnet-dvpn
+
+(exit 0)
+
+### upgrade: CLI answers
+$ bash -c devnet-dvpn daemon version | grep -q 'network devnet'
+
+(exit 0)
+
+### upgrade: config keys are the cf4c372 names (escrow_base_units, dns_backend, endpoint)
+$ bash -c sudo grep -q '^escrow_base_units' /var/lib/dvpnd/client/client/config.toml && sudo grep -q '^dns_backend' /var/lib/dvpnd/client/client/config.toml && sudo grep -q '^endpoint' /var/lib/dvpnd/client/config.toml && ! sudo grep -qE '^(escrow|dns|pipe) =' /var/lib/dvpnd/client/config.toml /var/lib/dvpnd/client/client/config.toml
+
+(exit 0)
+
+### upgrade: polkit start rule + restart backoff in place
+$ bash -c sudo test -f /etc/polkit-1/rules.d/50-devnet-dvpn.rules && [ "$(systemctl show dvpnd-client -p RestartMaxDelayUSec --value)" = 5min ]
+
+(exit 0)
+
+### upgrade: the user starts the service without a password
+$ bash -c sudo systemctl stop dvpnd-client && systemctl start --no-ask-password dvpnd-client && systemctl is-active -q dvpnd-client
+
+(exit 0)
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following packages were automatically installed and are no longer required:
+  bpfcc-tools bpftrace hwdata ieee-data libbpfcc libclang-cpp18 libclang1-18
+  libdebuginfod-common libdebuginfod1t64 libllvm18 libllvm19
+  libpkcs11-helper1t64 linux-tools-common openvpn python3-bpfcc
+  python3-netaddr ubuntu-kernel-accessories wireguard-tools
+Use 'sudo apt autoremove' to remove them.
+The following packages will be REMOVED:
+  devnet-dvpn-linux
+0 upgraded, 0 newly installed, 1 to remove and 12 not upgraded.
+After this operation, 583 MB disk space will be freed.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 133101 files and directories currently installed.)
+Removing devnet-dvpn-linux (0.1.0) ...
+uninstall-cleanup: service stopped and removed
+Processing triggers for desktop-file-utils (0.27-2build1) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
+Processing triggers for gnome-menus (3.36.0-1.1ubuntu3) ...
+Processing triggers for bamfdaemon (0.5.6+22.04.20220217-0ubuntu5) ...
+Rebuilding /usr/share/applications/bamf-2.index...
+== package
+devnet-dvpn-linux 0.1.0 deinstall ok config-files
+== files
+/var/lib/devnet-dvpn
+/var/lib/dvpnd/client
+== service
+inactive
+not-found
+== apparmor
+0
+== group
+dvpn:x:988:ubuntu,ddvdesk
+== nft
+== links
+== rules
+== procs
+== egress
+34.123.93.65
+
+### remove: service unit gone
+$ bash -c ! systemctl cat dvpnd-client >/dev/null 2>&1
+
+(exit 0)
+
+### remove: no dvpnd process
+$ bash -c ! pgrep -x dvpnd
+
+(exit 0)
+
+### remove: app files and links gone
+$ bash -c ! ls -d /opt/devnet-dvpn /usr/bin/devnet-dvpn /usr/bin/devnet-dvpn-desktop /usr/local/lib/devnet-dvpn 2>/dev/null | grep -q .
+
+(exit 0)
+
+### remove: polkit action + rule, AppArmor, unit drop-ins gone
+$ bash -c [ ! -e /usr/share/polkit-1/actions/network.sentinel.devnet-dvpn.policy ] && ! sudo test -e /etc/polkit-1/rules.d/50-devnet-dvpn.rules && [ ! -e /etc/systemd/system/dvpnd-client.service.d ] && [ ! -e /etc/apparmor.d/devnet-dvpn ] && ! sudo aa-status | grep -q devnet-dvpn
+
+(exit 0)
+
+### remove: no nft table, link or rule of ours
+$ bash -c ! sudo nft list tables | grep -q dvpnd && ! ip -o link | grep -qE ' (dvpn-|hy2-client)' && ! ip rule list | grep -q 51820
+
+(exit 0)
+
+### remove: direct egress (34.123.93.65)
+$ bash -c [ "$(curl -s -m 12 https://api.ipify.org)" = '34.123.93.65' ]
+
+(exit 0)
+
+### remove: device key home kept (on-chain permission + SOL)
+$ bash -c sudo test -f /var/lib/dvpnd/client/client/keys/device.json
+
+(exit 0)
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following packages were automatically installed and are no longer required:
+  bpfcc-tools bpftrace hwdata ieee-data libbpfcc libclang-cpp18 libclang1-18
+  libdebuginfod-common libdebuginfod1t64 libllvm18 libllvm19
+  linux-tools-common python3-bpfcc python3-netaddr ubuntu-kernel-accessories
+Use 'sudo apt autoremove' to remove them.
+The following NEW packages will be installed:
+  devnet-dvpn-linux
+0 upgraded, 1 newly installed, 0 to remove and 12 not upgraded.
+Need to get 0 B/129 MB of archives.
+After this operation, 583 MB of additional disk space will be used.
+Get:1 /home/ubuntu/ddvl/dist/devnet-dvpn_0.1.0_amd64.deb devnet-dvpn-linux amd64 0.1.0 [129 MB]
+Selecting previously unselected package devnet-dvpn-linux.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 132919 files and directories currently installed.)
+Preparing to unpack .../devnet-dvpn_0.1.0_amd64.deb ...
+Unpacking devnet-dvpn-linux (0.1.0) ...
+Setting up devnet-dvpn-linux (0.1.0) ...
+Processing triggers for desktop-file-utils (0.27-2build1) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
+Processing triggers for gnome-menus (3.36.0-1.1ubuntu3) ...
+Processing triggers for bamfdaemon (0.5.6+22.04.20220217-0ubuntu5) ...
+Rebuilding /usr/share/applications/bamf-2.index...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+### reinstall: package installed
+$ bash -c dpkg-query -W -f='${Status}' devnet-dvpn-linux | grep -q 'install ok installed'
+
+(exit 0)
+
+### reinstall: daemon install --yes
+$ bash -c devnet-dvpn daemon install --yes 2>&1 | grep -q 'installed and running'
+
+(exit 0)
+== package
+devnet-dvpn-linux 0.1.0 install ok installed
+== files
+/etc/apparmor.d/devnet-dvpn
+/etc/systemd/system/dvpnd-client.service
+/opt/devnet-dvpn
+/usr/bin/devnet-dvpn
+/usr/bin/devnet-dvpn-desktop
+/usr/local/lib/devnet-dvpn
+/usr/share/polkit-1/actions/network.sentinel.devnet-dvpn.policy
+/var/lib/devnet-dvpn
+/var/lib/dvpnd/client
+== service
+active
+enabled
+== apparmor
+1
+== group
+dvpn:x:988:ubuntu,ddvdesk
+== nft
+== links
+== rules
+== procs
+82071 /usr/local/lib/devnet-dvpn/dvpnd start --home /var/lib/dvpnd/client
+== egress
+34.123.93.65
+
+### reinstall: service active + enabled
+$ bash -c systemctl is-active -q dvpnd-client && systemctl is-enabled -q dvpnd-client
+
+(exit 0)
+
+### reinstall: same device (device.pub)
+$ bash -c [ "$(cat /var/lib/dvpnd/client/device.pub)" = 8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh ]
+
+(exit 0)
+
+### reinstall: doctor has no FAIL
+$ bash -c ! devnet-dvpn daemon doctor 2>&1 | grep -q '^FAIL'
+
+(exit 0)
+
+### AppImage, restricted userns: sandboxed launch stops with Chromium's SUID message (documented)
+$ grep -q SUID sandbox helper binary was found, but is not configured correctly /home/ubuntu/sweep/appimage-default.txt
+
+(exit 0)
+
+### AppImage --no-sandbox runs and attaches the service (exit 124)
+$ bash -c [ 124 = 124 ] && grep -q 'daemon attached' '/home/ubuntu/sweep/appimage-nosandbox.txt'
+
+(exit 0)

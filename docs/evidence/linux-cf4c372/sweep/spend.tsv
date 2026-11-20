@@ -1,0 +1,69 @@
+PASS	direct egress before sessions = 34.123.93.65	check	
+PASS	connect wireguard per GB	connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --units 1 --yes	Connected. Session fa86ca3d-984a-4e75-a601-3361885dc557  wireguard
+PASS	status while on wireguard	status	Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.17815324 SOL  2998.986 tDVPN  refundable 0 Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.999 tDVPN  0.04782584 SOL
+PASS	wireguard: egress IP = node (35.232.17.117)	check	
+PASS	wireguard: quality ip shows the node	quality ip	35.232.17.117 (api.ipify.org)
+PASS	disconnect wireguard	disconnect	Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+PASS	wireguard: no leftovers, egress back to direct	check	nft=0 links=0 procs=0 egress=34.123.93.65
+PASS	connect amneziawg per GB	connect DrTdBLR3rX3epsqw1gj7JG32s1uskxSfYCdurnKGbcqi --units 1 --yes	Connected. Session 94e8317f-9e89-4124-99fb-c107e272ab95  amneziawg
+PASS	status while on amneziawg	status	Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.17815324 SOL  2998.985 tDVPN  refundable 0 Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.998 tDVPN  0.04565168 SOL
+PASS	amneziawg: egress IP = node (35.232.17.117)	check	
+PASS	amneziawg: quality ip shows the node	quality ip	35.232.17.117 (api.ipify.org)
+PASS	disconnect amneziawg	disconnect	Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+PASS	amneziawg: no leftovers, egress back to direct	check	nft=0 links=0 procs=0 egress=34.123.93.65
+PASS	connect openvpn per GB	connect CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ --units 1 --yes	Connected. Session 22cc3d55-eaf3-40dc-ac9c-ccc1af556a92  openvpn
+PASS	status while on openvpn	status	Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.17815324 SOL  2998.984 tDVPN  refundable 0 Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.997 tDVPN  0.04347752 SOL
+PASS	openvpn: egress IP = node (35.232.17.117)	check	
+PASS	openvpn: leftover pattern sees the live process (positive control)	check	nft=0 links=0 procs=1 egress=35.232.17.117
+PASS	openvpn: quality ip shows the node	quality ip	35.232.17.117 (api.ipify.org)
+PASS	disconnect openvpn	disconnect	Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+PASS	openvpn: no leftovers, egress back to direct	check	nft=0 links=0 procs=0 egress=34.123.93.65
+PASS	connect hysteria2 per GB	connect 8rwN8HCeqM8WiaemKbckxCAjvGErh1LW8v1zPCBcXJbF --units 1 --yes	Connected. Session 60863393-6e15-42ff-a327-29e05387fd8e  hysteria2
+PASS	status while on hysteria2	status	Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.17815324 SOL  2998.983 tDVPN  refundable 0 Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.996 tDVPN  0.04130336 SOL
+PASS	hysteria2: egress IP = node (35.232.17.117)	check	
+PASS	hysteria2: leftover pattern sees the live process (positive control)	check	nft=0 links=1 procs=1 egress=35.232.17.117
+PASS	hysteria2: quality ip shows the node	quality ip	35.232.17.117 (api.ipify.org)
+PASS	disconnect hysteria2	disconnect	Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+PASS	hysteria2: no leftovers, egress back to direct	check	nft=0 links=0 procs=0 egress=34.123.93.65
+PASS	connect xray per GB	connect FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi --units 1 --yes	Connected. Session c38aec84-4e20-4142-8324-f469870931d9  xray  SOCKS 127.0.0.1:1080
+PASS	status while on xray	status	Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.17815324 SOL  2998.982 tDVPN  refundable 0 Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.995 tDVPN  0.0391292 SOL
+PASS	xray: egress IP = node (35.232.17.117) via SOCKS	check	
+PASS	xray: leftover pattern sees the live process (positive control)	check	nft=0 links=0 procs=1 egress=34.123.93.65
+PASS	xray: quality ip shows the node	quality ip	34.123.93.65 (api.ipify.org) VPN IP via SOCKS 127.0.0.1:1080: 35.232.17.117 (api.ipify.org)
+PASS	disconnect xray	disconnect	Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+PASS	xray: no leftovers, egress back to direct	check	nft=0 links=0 procs=0 egress=34.123.93.65
+PASS	connect v2ray per GB	connect DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3 --units 1 --yes	Connected. Session 42af6237-21a7-4b7e-af9c-3888fcbd8ce2  v2ray  SOCKS 127.0.0.1:1080
+PASS	proxy status shows the SOCKS endpoint	proxy status	SOCKS proxy: 127.0.0.1:1080 (point an app at it to send only that app through the VPN) System proxy: not set by this app
+PASS	v2ray: SOCKS 127.0.0.1:1080 egress = node	check	
+PASS	proxy on → GNOME mode manual + socks 127.0.0.1; proxy off → none	check	
+PASS	proxy browser (Chrome, own profile, through SOCKS)	proxy browser --browser chrome --url https://api.ipify.org	Opened Google Chrome through SOCKS 127.0.0.1:1080 in its own profile. Your other browser windows do not use the VPN.
+PASS	browser window runs with --proxy-server=socks5	check	
+PASS	connect --switch v2ray → wireguard	connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --units 1 --switch --yes	Connected. Session 562ccc38-6279-45d2-a0e3-f1655b92e876  wireguard
+PASS	after switch: egress = node	check	
+PASS	disconnect after switch	disconnect	Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+PASS	connect wireguard per hour	connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --basis per_hour --units 1 --yes	Connected. Session 31b9b94f-effd-42e5-8385-5a4f95509988  wireguard
+PASS	per hour: egress = node	check	
+PASS	disconnect per hour	disconnect	Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+PASS	connect --follow (ends on disconnect)	connect FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi --units 1 --yes --follow	Connected. Session 899a04f6-5682-4686-b4f3-a3c83870bbbb  xray  SOCKS 127.0.0.1:1080 Protected  down 0 B  up 0 B  spent 0 tDVPN
+PASS	channels (after sessions)	channels	J7Lq7EkpX2v1Bgdm5qioNhdmVznjM7q8Wa1FeQFUMJtB  closing per-GB    node 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib  deposit 1.001  used 0.001 Co4CUB9bLXYHBGTat9CZgZ9PWJKCHHyGDeEW9KTdLjk5  closing per-GB    node DrTdBLR3rX3epsqw1gj7JG32s1uskxSfYCdurnKGbcqi  deposit 0.001  used 0.001
+PASS	channels fund 6WYTHqd2zoVMyGJTV4xAp2E1xU8cv1HFXy5d3WXZrGHq	channels fund 6WYTHqd2zoVMyGJTV4xAp2E1xU8cv1HFXy5d3WXZrGHq --tdvpn 1 --yes	Topped up. 32Uid9xaZL1p1kSXot7bxYdJCDutvJGNmoFQ4jEdW478cHS43xv4htbNF3PHsnjAMCtzzRPWbWATvVXHwvpwJZpw
+PASS	settle list	settle list	3xBikHFfNbJM8QfHMpPoRvd5fm3sNusiQbtKNCQzR6Ew  open    refundable 0 59Dmtw3XdB5p7d6vEfqbXJtgHoDyTFHuCiK6EEi2BQJy  open    refundable 0
+PASS	settle run	settle run --yes	Done: 5sqA24BUnPQJ7pJHsvJMeWKPtprGcdzvQgUNGaiYqDnXjzsBVZhCUED1aLnkiDMhYioHAKiUbtudS9okaBHyngqj, 4hsKa2nbYxcs85wpcC5jwU5STzpr4MtjyVztXnkdRYXBFnDUmtW5kG4eju3No2DrsdZvt2DU6NgGqPQVP2B3FWmp, DGVkumKkRJhV6eP98k6YNqy9cSWNYuYyBmZAtBqWwN8zST5nq1ihTgDesM9U49L5FqCEY8BRKPzhdE9p3tZ4pch, VxtLNJtSm9KDwGHt8XpZRB2jJ
+PASS	settle withdraw	settle withdraw --yes	Nothing to withdraw: your refundable balance is 0.
+PASS	plans subscribe (first listed plan)	plans subscribe 6zKPsCtTweAL9s7Rdg3NT6DrCyX3c7r6fgbtbuKoK3rB --yes	Subscribed. ghra9adi4vZ7ZdTxrazFRngv94FeDifHB5EZQV75sMA  53piMG2CE1WJReupYrns4aAR1vYQ3VkDJCFLNLoT1bX9pc1WoPyrfHsty7WSLRmrGRtCDQxSHEWLtcXqZ2aE8DjB
+PASS	plans subscriptions	plans subscriptions	ghra9adi4vZ7ZdTxrazFRngv94FeDifHB5EZQV75sMA  plan 6zKPsC…K3rB  expires in 23 h 59 min
+FAIL	connect on the subscription (exit 1, want 0)	connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --plan ghra9adi4vZ7ZdTxrazFRngv94FeDifHB5EZQV75sMA --yes	Error: Something went wrong. Retry. → Retry
+FAIL	plan session: egress = node	check	
+PASS	disconnect plan session	disconnect	No active session.
+PASS	plans close the subscription	plans close ghra9adi4vZ7ZdTxrazFRngv94FeDifHB5EZQV75sMA --yes	Closed. 2xkC3urgDfUfQ6AZMtzysTCU3ThsfmfFddx4Fza4T771PHJ5y9A76iKMSrGjDTSsEGc7NRv9HJQ8GRrTqBv3CBU7
+PASS	test run (wireguard + v2ray)	test run 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3 --max-spend 5 --yes	[1/2] Measuring your speed without VPN… [1/2] 8sV25K…Tdib Checking the server…
+PASS	test history	test history	2026-10-21T15-13-22-077Z  2/2  FAST 0  SLOW 2  FAIL 0 2026-10-21T13-11-52-263Z  2/2  FAST 0  SLOW 0  FAIL 2
+PASS	test show --compare	test show --compare	Run 2026-10-21T15-13-22-077Z  2/2  FAST 0  SLOW 2  FAIL 0  without VPN 336.13 Mbps SLOW      8sV25K…Tdib  wireguard  United States   11.86 Mbps, under 67.2 Mbps (20% of your 336.13 Mbps without VPN).
+PASS	test export	test export --out /home/ubuntu/sweep/test-run.json	Wrote /home/ubuntu/sweep/test-run.json
+PASS	test stop (nothing running)	test stop	Asked any running test to stop after its current server.
+PASS	nodes recent (after sessions)	nodes recent	DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3  United States  v2ray 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib  United States  wireguard
+PASS	history list	history list	2026-10-21T15:14:05.000Z  DfJukf…Q1K3  v2ray  down 7.1 MB  spent 0.000002 tDVPN  closed by client 2026-10-21T15:13:26.000Z  8sV25K…Tdib  wireguard  down 10.8 MB  spent 0 tDVPN  closed by client
+PASS	history summary	history summary	Sessions   23 Spent      0.005009 tDVPN (last 30 days 0.005009)
+PASS	sessions	sessions	81e5f0e8-c8b7-4bc8-b1c8-2bb641d8ad2e  ended   DfJukf…Q1K3  v2ray  spent 0.000002  Disconnected. 0717f6ac-8682-439d-a5c9-fb0fe27c792b  ended   8sV25K…Tdib  wireguard  spent 0  Disconnected.
+PASS	tickets	tickets	753893ce8403  sub   node  68766f6d6f6f  sub   node 
+PASS	final: no leftovers, direct egress	check	nft=0 links=0 procs=0 egress=34.123.93.65

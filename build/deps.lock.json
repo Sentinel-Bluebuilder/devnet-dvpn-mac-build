@@ -1,0 +1,145 @@
+{
+  "_comment": "Every third-party program the macOS packages ship, per architecture (x64 = Intel, arm64 = Apple silicon). Pinned by version + SHA-256 (checked against each publisher's own digest file on 2026-10-22: hysteria hashes.txt, v2ray/Xray .zip.dgst); scripts/fetch-deps.mjs refuses any mismatch. Same versions as the Windows and Linux apps. WireGuard / wireguard-go / AmneziaWG / OpenVPN come from Homebrew (install-deps.sh), not bundled. Bump = new url + sha256 + a live test.",
+  "deps": [
+    {
+      "name": "hysteria2",
+      "arch": "x64",
+      "title": "Hysteria 2",
+      "version": "2.13.0",
+      "url": "https://github.com/apernet/hysteria/releases/download/app/v2.13.0/hysteria-darwin-amd64",
+      "sha256": "7a155230ae4bbffc92657f486484a48ed703bd828abf7a3e19287fea1f9ca74a",
+      "kind": "exe",
+      "dest": "resources/bin/hysteria2/hysteria2",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/apernet/hysteria/blob/master/LICENSE.md",
+      "sourceUrl": "https://github.com/apernet/hysteria/tree/app/v2.13.0"
+    },
+    {
+      "name": "hysteria2",
+      "arch": "arm64",
+      "title": "Hysteria 2",
+      "version": "2.13.0",
+      "url": "https://github.com/apernet/hysteria/releases/download/app/v2.13.0/hysteria-darwin-arm64",
+      "sha256": "c8c3589239ce4ecf335c07a3f6ec11b3ef8fbdfe9e5a5ea0ef8ba8ce50d2bb90",
+      "kind": "exe",
+      "dest": "resources/bin/hysteria2/hysteria2",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/apernet/hysteria/blob/master/LICENSE.md",
+      "sourceUrl": "https://github.com/apernet/hysteria/tree/app/v2.13.0"
+    },
+    {
+      "name": "v2ray",
+      "arch": "x64",
+      "title": "V2Ray",
+      "version": "5.53.0",
+      "url": "https://github.com/v2fly/v2ray-core/releases/download/v5.53.0/v2ray-macos-64.zip",
+      "sha256": "73e907f20355a6be16e4090c5c3693404f0c56b48a00111160cfafc874e1f317",
+      "kind": "zip",
+      "dest": "resources/bin/v2ray",
+      "files": [
+        "v2ray",
+        "geoip.dat",
+        "geosite.dat"
+      ],
+      "exec": [
+        "v2ray"
+      ],
+      "license": "MIT",
+      "licenseUrl": "https://github.com/v2fly/v2ray-core/blob/master/LICENSE",
+      "sourceUrl": "https://github.com/v2fly/v2ray-core/tree/v5.53.0"
+    },
+    {
+      "name": "v2ray",
+      "arch": "arm64",
+      "title": "V2Ray",
+      "version": "5.53.0",
+      "url": "https://github.com/v2fly/v2ray-core/releases/download/v5.53.0/v2ray-macos-arm64-v8a.zip",
+      "sha256": "75d0b4bf571b33aff8fb3eacb4a7ff16061a2d227503d75c5247852ef0958b15",
+      "kind": "zip",
+      "dest": "resources/bin/v2ray",
+      "files": [
+        "v2ray",
+        "geoip.dat",
+        "geosite.dat"
+      ],
+      "exec": [
+        "v2ray"
+      ],
+      "license": "MIT",
+      "licenseUrl": "https://github.com/v2fly/v2ray-core/blob/master/LICENSE",
+      "sourceUrl": "https://github.com/v2fly/v2ray-core/tree/v5.53.0"
+    },
+    {
+      "name": "xray",
+      "arch": "x64",
+      "title": "Xray",
+      "version": "26.3.27",
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-64.zip",
+      "sha256": "f5b0471d3459eff1b82e48af0aeac186abcc3298210070afbbbd8437a4e8b203",
+      "kind": "zip",
+      "dest": "resources/bin/xray",
+      "files": [
+        "geoip.dat",
+        "geosite.dat"
+      ],
+      "exec": [],
+      "license": "MPL-2.0",
+      "licenseUrl": "https://github.com/XTLS/Xray-core/blob/main/LICENSE",
+      "sourceUrl": "https://github.com/XTLS/Xray-core/tree/v26.3.27",
+      "note": "Only the geo data files come from this zip; the xray binary is the patched local build (local[] below)."
+    },
+    {
+      "name": "xray",
+      "arch": "arm64",
+      "title": "Xray",
+      "version": "26.3.27",
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-arm64-v8a.zip",
+      "sha256": "2e93a67e8aa1936ecefb307e120830fcbd4c643ab9b1c46a2d0838d5f8409eaf",
+      "kind": "zip",
+      "dest": "resources/bin/xray",
+      "files": [
+        "geoip.dat",
+        "geosite.dat"
+      ],
+      "exec": [],
+      "license": "MPL-2.0",
+      "licenseUrl": "https://github.com/XTLS/Xray-core/blob/main/LICENSE",
+      "sourceUrl": "https://github.com/XTLS/Xray-core/tree/v26.3.27",
+      "note": "Only the geo data files come from this zip; the xray binary is the patched local build (local[] below)."
+    }
+  ],
+  "local": [
+    {
+      "name": "dvpnd",
+      "arch": "x64",
+      "path": "resources/bin/sentinel-dvpnd",
+      "src": "sentinel-dvpnd-darwin-amd64-fork-cb33-4-final6.16",
+      "sha256": "c24c6b7cd29cbdb4f97a090a7ac23d41867466aa07ecd76a5b6376c8677d10e4",
+      "note": "final6.16 11-13 (tag fork-cb33-4-final6.16 = 5b0a398, ctl-1 ~/final-cb33-616, SHA256SUMS 6/6 OK; rc.2): final6.15 + darwin pin.CloseConns after admitNode's pf Apply (the reload dropped the in-flight RPC conn state). Before: final6.15 (7b914d4) = final6.14 + darwin Stop waits (bounded 8 s) for the old utun to go, then closes pinned RPC conns (Agent M: chain reads timed out through the dying wireguard-go utun in a switch). Before: final6.14 (0d8410f) = final6.13 + Q0557 admitNode (a server switch under the kill switch moves the block permit to the new server in one Apply; the block never lifts). Before: final6.13 (6f5ae65) = final6.12 + Q0555 (Mac userspace WireGuard/AmneziaWG: a failed stats read with the tunnel gone (name file / dead UAPI socket) after Wait cannot tell = engine exited, redial). Before: final6.12 (f99ca49) = final6.11 + f99ca49 (doctor: a user kill_switch store failure reads skip, Q0547 part 2). Before: final6.11 (9d21e47) = final6.10 + Q0549 (after an engine crash under kill switch persist dvpnd redials on the data-path probe first instead of ending the session on the stats poller and leaving the user blocked). final6.10 (479f5a3) = final6.9 + Q0547 (non-root doctor reports privileges, key permission denials, the kill_switch store and the macOS background check as severity skip, never ok; sfltool still never run as a normal user) + Windows-only Q0548 SCM reset and OpenVPN minimum 2.6.23. final6.9 (edfea87) = final6.8 + Q0542 (doctor never runs `sfltool dumpbtm` as a normal user: it popped an administrator password dialog behind the Kill switch / Diagnostics screens and hung; 10 s deadline as root; whole doctor run bounded by --timeout, default 60 s). final6.8 (4d776ab) = final6.7 (2e6ea49) + Q0538 pf interface list (kill switch + app split: \"utun4,dvpn-c0\" rendered as { utun4 dvpn-c0 }, pfctl refused the comma form and the connect failed) + a latent Linux nft fix. devnet ldflags (program J52dyXW3, mint Hen2LVP6), go1.27.3 -trimpath. No vcs stamp (archive build)."
+    },
+    {
+      "name": "dvpnd",
+      "arch": "arm64",
+      "path": "resources/bin/sentinel-dvpnd",
+      "src": "sentinel-dvpnd-darwin-arm64-fork-cb33-4-final6.16",
+      "sha256": "7dee104ef4a5bc8a68fb9b46458cddafc723b33f94997d5619081a6f7ffd6908",
+      "note": "macOS Apple silicon build of final6.16 (5b0a398). Not live-tested: the rig is Intel"
+    },
+    {
+      "name": "xray",
+      "arch": "x64",
+      "path": "resources/bin/xray/xray",
+      "src": "xray-darwin-amd64-26.3.27-ddv2",
+      "sha256": "5177d51dc69b01d92b3007e79d0246009782c1f9b2a83a442f5547108297820a",
+      "note": "Xray 26.3.27 + docs/patches/xray-0001-darwin-find-process.patch (macOS process lookup for split by app; ddv2: a not-local answer from an address list older than 1 s is re-read, the first-minute split miss), built by scripts/e2e/mac/build-xray.sh with the release flags (core.build=ddv2)"
+    },
+    {
+      "name": "xray",
+      "arch": "arm64",
+      "path": "resources/bin/xray/xray",
+      "src": "xray-darwin-arm64-26.3.27-ddv2",
+      "sha256": "3cb28b569808c905ea709f2d1c43d5edd732c9f605bd34ef67dd32223eef9efb",
+      "note": "Apple silicon build of the same patched Xray. Not live-tested: the rig is Intel"
+    }
+  ]
+}

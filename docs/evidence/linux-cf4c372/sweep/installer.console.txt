@@ -1,0 +1,25 @@
+ok   before: service active
+ok   upgrade: service still active
+ok   upgrade: service dvpnd = packaged dvpnd
+ok   upgrade: AppArmor profile loaded
+ok   upgrade: CLI answers
+ok   upgrade: config keys are the cf4c372 names (escrow_base_units, dns_backend, endpoint)
+ok   upgrade: polkit start rule + restart backoff in place
+ok   upgrade: the user starts the service without a password
+ok   remove: service unit gone
+ok   remove: no dvpnd process
+ok   remove: app files and links gone
+ok   remove: polkit action + rule, AppArmor, unit drop-ins gone
+ok   remove: no nft table, link or rule of ours
+ok   remove: direct egress (34.123.93.65)
+ok   remove: device key home kept (on-chain permission + SOL)
+ok   reinstall: package installed
+ok   reinstall: daemon install --yes
+ok   reinstall: service active + enabled
+ok   reinstall: same device (device.pub)
+ok   reinstall: doctor has no FAIL
+installer-test.sh: line 78: 82142 Trace/breakpoint trap   DISPLAY=:99 timeout 20 "$APPIMAGE" > "$OUT/appimage-default.txt" 2>&1
+ok   AppImage, restricted userns: sandboxed launch stops with Chromium's SUID message (documented)
+ok   AppImage --no-sandbox runs and attaches the service (exit 124)
+
+installer: passed 22  failed 0  (details /home/ubuntu/sweep/installer.log)

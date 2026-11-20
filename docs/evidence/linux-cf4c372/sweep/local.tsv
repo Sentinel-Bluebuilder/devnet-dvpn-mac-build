@@ -1,0 +1,63 @@
+PASS	version	version	devnet-dvpn 0.1.0  network devnet  linux
+PASS	help	help	devnet-dvpn — pure-P2P dVPN on the Sentinel Solana devnet
+PASS	unknown command is a usage error	teleport	unknown command: teleport
+PASS	wallet import without a file	wallet import	wallet import <keyfile.json | -> (- reads stdin)
+PASS	wallet show with no wallet	wallet show	No wallet. Use: wallet create | wallet import <file>
+PASS	wallet create (libsecret keyring)	wallet create --yes	Created 5JtRHTwtKuH5nHkogGC2Tgh5vJDTuGFLxzNbJkN5xnvY Write these 24 words down. They are shown once:
+PASS	wallet secret is in the keyring, not on disk	check	
+PASS	wallet receive prints address + QR	wallet receive	5JtRHTwtKuH5nHkogGC2Tgh5vJDTuGFLxzNbJkN5xnvY [47m[30m ▄▄▄▄▄▄▄     ▄▄ ▄▄▄▄▄▄     ▄▄▄▄▄▄▄ [0m
+PASS	wallet logout needs --yes	wallet logout	Remove the wallet key from this computer. Funds stay on chain; you need your backup to get back in. Re-run with --yes to do it.
+PASS	wallet send needs --yes	wallet send --to 9enW4xCJrmytnEC6VsJYPbcT2ng3QTUwUkAHSrKR9Xrj --sol 0.001	Send 0.001 SOL to 9enW4xCJrmytnEC6VsJYPbcT2ng3QTUwUkAHSrKR9Xrj on Solana devnet. Re-run with --yes to do it.
+PASS	wallet send rejects a bad address	wallet send --to nope --sol 0.001 --yes	"nope" is not a Solana wallet address.
+PASS	wallet send needs an amount	wallet send --to AFaCESaEAFHZZCg6uzPvShVALUuACJnSh3i2wBe14kWB	Give --tdvpn N and/or --sol N.
+PASS	wallet logout --yes	wallet logout --yes	Wallet removed.
+PASS	logout removed the keyring entry	check	
+PASS	wallet import a key file (throwaway)	wallet import /home/ubuntu/ddv-sweep-local/throwaway.json --yes	Imported 5UzJamKeAXgKiCSbTL7Ja4NeZgMYkR5Vj38QrQizjb1H
+PASS	wallet logout after import	wallet logout --yes	Wallet removed.
+PASS	wallet create again	wallet create --yes	Created 33jaEDkHbYGj7ZjaHiH3CxFYxYbQpfFZ6EBk4etKmZMM Write these 24 words down. They are shown once:
+PASS	wallet logout again	wallet logout --yes	Wallet removed.
+PASS	wallet import refuses a junk file	wallet import /home/ubuntu/ddv-sweep-local/junk.txt --yes	Error: That recovery phrase is not valid. Check the words and their order.
+PASS	settings get	settings get	rpcUrls            ["https://api.devnet.solana.com"] defaultBasis       "per_gb"
+PASS	settings set (allow-listed key)	settings set defaultBasis=per_hour	defaultBasis = "per_hour"
+PASS	settings set rejects unknown keys	settings set bogus=1	unknown setting "bogus". Known: rpcUrls, defaultBasis, defaultGb, defaultHours, preferredCountry, autoConnect, autoTopUpDevice, startWithOs, closeToTray, thirdPartyChecks, notifications, theme, language, favourites, allowanceTdvpn, poll
+PASS	settings set rejects a bad value	settings set defaultGb=3	Error: Invalid value for defaultGb (left unchanged)
+PASS	rpc state	rpc state	Serving https://api.devnet.solana.com/  slot 513561057  190 ms Warning: only the public devnet RPC is configured; it rate-limits real use.
+PASS	rpc set rejects plain http	rpc set http://example.com	Error: Not accepted (https only; http only for 127.0.0.1): http://example.com
+PASS	rpc set (public devnet)	rpc set https://api.devnet.solana.com	RPC pool: https://api.devnet.solana.com
+PASS	poll show	poll show	wallet            60 s   default   60   range 15-3600   Wallet balances nodes            300 s   default  300   range 60-3600   Node list
+PASS	poll set wallet=30	poll set wallet=30	wallet            30 s   default   60   range 15-3600   Wallet balances nodes            300 s   default  300   range 60-3600   Node list
+PASS	poll set refuses a too-fast cadence	poll set wallet=1	wallet must be a whole number of seconds from 15 to 3600
+PASS	poll reset wallet	poll reset wallet	wallet            60 s   default   60   range 15-3600   Wallet balances nodes            300 s   default  300   range 60-3600   Node list
+PASS	poll run nodes	poll run nodes	nodes          ok    6349 ms
+PASS	poll watch for 10 s	poll watch --seconds 10	15:01:39  wallet         ok      91 ms 15:01:39  subscriptions  ok      33 ms
+PASS	nodes list (chain read + probes)	nodes list	up    CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ  US 0.001 tDVPN/GB     0.001 tDVPN/h      openvpn up    FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi  US 0.001 tDVPN/GB     0.001 tDVPN/h      xray
+PASS	nodes list --online	nodes list --online	up    CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ  US 0.001 tDVPN/GB     0.001 tDVPN/h      openvpn up    FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi  US 0.001 tDVPN/GB     0.001 tDVPN/h      xray
+PASS	nodes list --protocol wireguard --sort price --no-probe	nodes list --protocol wireguard --sort price --no-probe	up    8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib  US 0.001 tDVPN/GB     0.001 tDVPN/h      wireguard up    5CBc2eb3JW9ANR24Kq1ypZLr7HVbchtw8bPSTZrJMg3j  NL 0.001 tDVPN/GB     0.001 tDVPN/h      wireguard
+PASS	nodes list --country US --no-probe	nodes list --country US --no-probe	up    CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ  US 0.001 tDVPN/GB     0.001 tDVPN/h      openvpn up    FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi  US 0.001 tDVPN/GB     0.001 tDVPN/h      xray
+PASS	nodes show (WireGuard node)	nodes show 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib	8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib   United States (North America)  https://35.232.17.117:18711
+PASS	cost per GB	cost 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --units 2	Deposit 0.002 tDVPN for 2 h. Protocol fee: 2% of what you use (at most 0.00004 tDVPN). Unused deposit is refunded after settlement.
+PASS	cost per hour	cost 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --basis per_hour --units 1	Deposit 0.001 tDVPN for 1 h. Protocol fee: 2% of what you use (at most 0.00002 tDVPN). Unused deposit is refunded after settlement.
+PASS	nodes fav toggles a favourite	nodes fav 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib	Added to favourites.
+PASS	nodes recent	nodes recent	No recent servers.
+PASS	plans list	plans list	38fjwHU3gGdfHAYeUnjX6LD9zXka82Kut2ooJwudYqLG  0.001 tDVPN / 1 hour  1 GB  1 server 6zKPsCtTweAL9s7Rdg3NT6DrCyX3c7r6fgbtbuKoK3rB  0.001 tDVPN / 1 day  5 GB  6 servers
+PASS	plans roster (first listed plan)	plans roster 6zKPsCtTweAL9s7Rdg3NT6DrCyX3c7r6fgbtbuKoK3rB	[cli] tickets unavailable: daemon: The VPN service is not running. 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib  live
+PASS	plans subscribe needs a plan address	plans subscribe nope	plans subscribe <plan> --yes
+PASS	history list (empty)	history list	No history.
+PASS	history summary (empty)	history summary	Sessions   0 Spent      0 tDVPN (last 30 days 0)
+PASS	history export	history export --out /home/ubuntu/ddv-sweep-local/h.csv	Wrote /home/ubuntu/ddv-sweep-local/h.csv
+PASS	history export wrote a CSV header	check	
+PASS	logs	logs --lines 5	[2026-10-21T15:01:23.774Z] info  wallet: imported {"address":"5UzJamKeAXgKiCSbTL7Ja4NeZgMYkR5Vj38QrQizjb1H"} [2026-10-21T15:01:24.310Z] info  wallet: removed from this computer
+PASS	proxy status	proxy status	SOCKS proxy: none (only a V2Ray or Xray session has one) System proxy: not set by this app
+PASS	proxy on refuses without a SOCKS session	proxy on --yes	Error: The current session has no SOCKS endpoint (only V2Ray/Xray sessions do). Nothing was changed.
+PASS	proxy off with nothing set is a no-op	proxy off	System proxy restored.
+PASS	proxy browser refuses without a session	proxy browser	Error: The current session has no SOCKS endpoint (only V2Ray/Xray sessions do). Nothing was opened.
+PASS	status without a daemon says so	status	Wallet   none Device   not set up
+PASS	connect needs --yes	connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib	Connect to 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib: deposit up to 0.001 tDVPN (1 h), unused part refunded after settlement. Re-run with --yes to do it.
+PASS	settle run needs --yes	settle run	Settle 0 deposit(s) now and withdraw refunds to your wallet. Re-run with --yes to do it.
+PASS	device setup without a wallet	device setup --yes	Error: Set up the wallet and the VPN service first.
+PASS	daemon install before device setup	daemon install --yes	Error: Create or import a wallet, then run "device setup --yes": the service will not start without a funded, permitted device.
+PASS	test plan (no transaction)	test plan 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3	2 servers: up to 0.002 tDVPN in deposits (per-hour ones close right after).
+PASS	test history (empty)	test history	No test runs yet.
+PASS	quality ip	quality ip	34.123.93.65 (api.ipify.org)
+PASS	quality speed	quality speed	325.2 Mbps (speed.cloudflare.com)
+PASS	daemon drivers (no admin)	daemon drivers	ok    Linux (64-bit)               present 6.8.0-1071-gcp ok    WireGuard tools              present 1.0.20210914

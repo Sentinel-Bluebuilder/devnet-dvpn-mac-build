@@ -1,0 +1,33 @@
+PASS	daemon version (network identity)	daemon version	dfe36c7-dirty  network devnet  program J52dyXW3a6mkatvrQct3fo6dA9vqUtcsdBt5gGqrTBXs  mint Hen2LVP6KooGaXEvdSyCHWghsEY4gLLn7wix8z6zHFSa  OK
+PASS	daemon doctor	daemon doctor	ok    kill_switch                  held by the running service (readable by root only) ok    build                        
+PASS	doctor has no FAIL row	check	
+PASS	daemon settings	daemon settings	killSwitch     off allowLan       false
+PASS	daemon drivers	daemon drivers	ok    Linux (64-bit)               present 6.8.0-1071-gcp ok    WireGuard tools              present 1.0.20210914
+PASS	device show	device show	Device     8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh Home       /var/lib/dvpnd/client
+PASS	device plan	device plan --allowance 2	1. Change this device's spending limit from 2000 to 2 tDVPN
+PASS	device register reads the home	device register	Recorded device 8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh
+PASS	status	status	Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.19856244 SOL  3000 tDVPN  refundable 0 Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 2000 tDVPN  0.05 SOL
+PASS	sessions	sessions	No sessions.
+PASS	channels	channels	No channels.
+PASS	tickets	tickets	No tickets.
+PASS	settle list	settle list	Nothing to settle.
+PASS	plans subscriptions	plans subscriptions	No subscriptions.
+PASS	wallet show (test wallet, read)	wallet show	Address    HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i SOL        0.19856244
+PASS	disconnect with no session is a no-op	disconnect	No active session.
+PASS	daemon restore-network (nothing to restore)	daemon restore-network	Network restored.
+PASS	device setup stops for --yes	device setup --allowance 3	One transaction:   - Change this device's spending limit from 2000 to 3 tDVPN
+PASS	daemon install stops for --yes	daemon install	Install and start the VPN service (one administrator prompt). With kill switch on, a stopped session blocks internet until you disconnect or restore network. Re-run with --yes to do it.
+PASS	daemon set stops for --yes	daemon set --kill-switch on	Apply service settings and restart it (one administrator prompt): {
+PASS	device revoke stops for --yes	device revoke	Remove spending permission for device 8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh. Re-run with --yes to do it.
+PASS	settle withdraw stops for --yes	settle withdraw	Move your refundable balance back to your wallet. Re-run with --yes to do it.
+PASS	daemon repair-drivers stops for --yes	daemon repair-drivers	Install or repair WireGuard, AmneziaWG, OpenVPN and nftables with apt (one administrator prompt). Tools already installed are left alone. Re-run with --yes to do it.
+PASS	daemon set --allow-lan true	daemon set --allow-lan true --yes	Applied and restarted.
+PASS	allow-lan reads back true	daemon settings	killSwitch     off allowLan       true
+PASS	allow_lan written to the service config	check	
+PASS	daemon set --allow-lan false --dns cloudflare --dns-mode resolvectl	daemon set --allow-lan false --dns cloudflare --dns-mode resolvectl --yes	Applied and restarted.
+PASS	dns reads back	daemon settings	killSwitch     off allowLan       false
+PASS	daemon set refuses the Windows-only netsh	daemon set --dns-mode netsh --yes	DNS mode must be one of resolvectl, resolvconf, none
+PASS	daemon set --kill-switch off	daemon set --kill-switch off --yes	Applied and restarted.
+PASS	kill switch reads back off	daemon settings	killSwitch     off allowLan       false
+PASS	service active and socket answering after restarts	check	
+PASS	daemon repair-drivers (nothing missing)	daemon repair-drivers --yes	ok    Linux (64-bit)               present 6.8.0-1071-gcp ok    WireGuard tools              present 1.0.20210914

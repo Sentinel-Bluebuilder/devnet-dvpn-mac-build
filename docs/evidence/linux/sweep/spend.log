@@ -1,0 +1,287 @@
+
+### direct egress before sessions = 34.123.93.65
+$ bash -c [ -n '34.123.93.65' ] && [ '34.123.93.65' != '35.232.17.117' ]
+
+(exit 0)
+
+### connect wireguard per GB
+$ devnet-dvpn connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --units 1 --yes
+Error: The payment transaction was rejected by the network program.
+→ Try stream payment
+(exit 1)
+
+### connect amneziawg per GB
+$ devnet-dvpn connect DrTdBLR3rX3epsqw1gj7JG32s1uskxSfYCdurnKGbcqi --units 1 --yes
+Error: The payment transaction was rejected by the network program.
+→ Try stream payment
+(exit 1)
+
+### connect openvpn per GB
+$ devnet-dvpn connect CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ --units 1 --yes
+Error: The payment transaction was rejected by the network program.
+→ Try stream payment
+(exit 1)
+
+### connect hysteria2 per GB
+$ devnet-dvpn connect 8rwN8HCeqM8WiaemKbckxCAjvGErh1LW8v1zPCBcXJbF --units 1 --yes
+Error: The payment transaction was rejected by the network program.
+→ Try stream payment
+(exit 1)
+
+### connect xray per GB
+$ devnet-dvpn connect FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi --units 1 --yes
+Error: The payment transaction was rejected by the network program.
+→ Try stream payment
+(exit 1)
+
+### connect v2ray per GB
+$ devnet-dvpn connect DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3 --units 1 --yes
+Error: The payment transaction was rejected by the network program.
+→ Try stream payment
+(exit 1)
+
+### proxy status shows the SOCKS endpoint
+$ devnet-dvpn proxy status
+SOCKS proxy: none (only a V2Ray or Xray session has one)
+System proxy: not set by this app
+(exit 0)
+
+### v2ray: SOCKS  egress = node
+$ bash -c [ "$(curl -s -m 15 --socks5-hostname  https://api.ipify.org)" = '35.232.17.117' ]
+curl: (2) no URL specified
+curl: try 'curl --help' or 'curl --manual' for more information
+(exit 1)
+
+### proxy on → GNOME mode manual + socks 127.0.0.1; proxy off → none
+$ bash -c grep -q "'manual'" '/home/ubuntu/sweep/proxy-gnome.txt' && grep -q "'127.0.0.1'" '/home/ubuntu/sweep/proxy-gnome.txt' && tail -1 '/home/ubuntu/sweep/proxy-gnome.txt' | grep -q "'none'"
+
+(exit 1)
+
+### proxy browser (Chrome, own profile, through SOCKS)
+$ devnet-dvpn proxy browser --browser chrome --url https://api.ipify.org
+Error: The current session has no SOCKS endpoint (only V2Ray/Xray sessions do). Nothing was opened.
+(exit 1)
+
+### browser window runs with --proxy-server=socks5
+$ bash -c pgrep -af 'chrome.*--proxy-server=socks5://127.0.0.1' | head -1 | grep -q proxy-server
+
+(exit 0)
+
+### connect --switch v2ray → wireguard
+$ devnet-dvpn connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --units 1 --switch --yes
+Error: The payment transaction was rejected by the network program.
+→ Try stream payment
+(exit 1)
+
+### after switch: egress = node
+$ bash -c [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ]
+
+(exit 1)
+
+### disconnect after switch
+$ devnet-dvpn disconnect
+No active session.
+(exit 0)
+
+### connect wireguard per hour
+$ devnet-dvpn connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --basis per_hour --units 1 --yes
+Error: Something went wrong. Retry.
+→ Retry
+(exit 1)
+
+### per hour: egress = node
+$ bash -c [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ]
+
+(exit 1)
+
+### disconnect per hour
+$ devnet-dvpn disconnect
+No active session.
+(exit 0)
+
+### connect --follow (ends on disconnect)
+$ devnet-dvpn connect FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi --units 1 --yes --follow
+Error: The payment transaction was rejected by the network program.
+→ Try stream payment
+(exit 1)
+
+### channels (after sessions)
+$ devnet-dvpn channels
+J7Lq7EkpX2v1Bgdm5qioNhdmVznjM7q8Wa1FeQFUMJtB  open    per-GB    node 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib  deposit 0.001  used 0.001
+Co4CUB9bLXYHBGTat9CZgZ9PWJKCHHyGDeEW9KTdLjk5  open    per-GB    node DrTdBLR3rX3epsqw1gj7JG32s1uskxSfYCdurnKGbcqi  deposit 0.001  used 0.001
+9SXf8wh3q154KRatKT2FrkbXLshbzcripkfKf7hhWKA1  open    per-GB    node CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ  deposit 0.001  used 0.001
+EvkJva3yWBPjb3vQRhm3ZnvQ1fZak2xEaNB7cZWAtCEP  open    per-GB    node 8rwN8HCeqM8WiaemKbckxCAjvGErh1LW8v1zPCBcXJbF  deposit 0.001  used 0.001
+7swc4Eh8BS3sGPTfapmMwDCiAT4WUmmyqEN4sbiodv5c  open    per-GB    node FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi  deposit 0.001  used 0.001
+Dz1JF9y28zrwDPZxoDQj4kxorcya5SFdQXXNK25dd6h3  open    per-GB    node DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3  deposit 0.001  used 0.001
+AVBpikgrdXktJ6xrPB47UZykvjEdSJnZpBMJqTmoH55t  open    per-GB    node 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib  deposit 0.001  used 0.001
+Bu7F8uSLAQZGzMmrrRDjrcANCbPENSzA5CJan7fKisDn  open    per-hour  node 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib  deposit 0.001  used 0
+JB6wTsFcoufu3pbSb1weT3q2K59zwnxNAGfydD7uzaMG  open    per-GB    node FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi  deposit 0.001  used 0.001
+(exit 0)
+
+### channels fund J7Lq7EkpX2v1Bgdm5qioNhdmVznjM7q8Wa1FeQFUMJtB
+$ devnet-dvpn channels fund J7Lq7EkpX2v1Bgdm5qioNhdmVznjM7q8Wa1FeQFUMJtB --tdvpn 1 --yes
+Topped up. 5j5EZnjzrxZ5waphdyDJzkuC8jmCkErhnvySVXHGRjjqeWEmShHKWV8DacG1ct7tKcWXZ8kfWCPYgNpubC8dSMJR
+(exit 0)
+
+### settle list
+$ devnet-dvpn settle list
+7swc4Eh8BS3sGPTfapmMwDCiAT4WUmmyqEN4sbiodv5c  open    refundable 0
+9SXf8wh3q154KRatKT2FrkbXLshbzcripkfKf7hhWKA1  open    refundable 0
+AVBpikgrdXktJ6xrPB47UZykvjEdSJnZpBMJqTmoH55t  open    refundable 0
+Bu7F8uSLAQZGzMmrrRDjrcANCbPENSzA5CJan7fKisDn  ready   refundable 0
+Co4CUB9bLXYHBGTat9CZgZ9PWJKCHHyGDeEW9KTdLjk5  open    refundable 0
+Dz1JF9y28zrwDPZxoDQj4kxorcya5SFdQXXNK25dd6h3  open    refundable 0
+EvkJva3yWBPjb3vQRhm3ZnvQ1fZak2xEaNB7cZWAtCEP  open    refundable 0
+J7Lq7EkpX2v1Bgdm5qioNhdmVznjM7q8Wa1FeQFUMJtB  open    refundable 1
+JB6wTsFcoufu3pbSb1weT3q2K59zwnxNAGfydD7uzaMG  open    refundable 0
+(exit 0)
+
+### settle run
+$ devnet-dvpn settle run --yes
+Done: 46bo2KUrW7pVfuZBnTNPxavckVn6gdwWkhR3WFFecjJQvn9NvWXkRWesijT3AW9b5HTDnUgPKNWy1N9tPgxByKEH, 5xFmPuKiv11DgEAbUZZXGZ5AKuvprVJ8N3Ba1xyaWSk4Yjn4eRqVLt3tzWdTXLt2Xqu2faExygLALb7jevLiLMYJ, 3cENiDJjkWd6Cyv4te5eqy1RY8w7j5XPvADWms5gDK7Js76PCJM8uAtjqNKDLsUro5c4KZL6VEA1koo9gBB7LJA4, MH6FQP5dt3FQ5Tmg9agjkpkjxsYvHBC12WhnzPZjfa93VQCjDmkgH3zahg9KJSQWDT3GmSRh9u9vLW1JPvBm3Ef, 3gHXnCEWVcNXJvv2Yusi1kvXuovvctME4stvAtR9br5yUuoaMwoKLAYWqRJSsG2kaHUru584iWCVnDHmMJhA4PRy, 3HcXcufvHUbsrR9iWQsiL2wnqvoMfk2TPTL17AQjpAQNBJCN8iVTSzgZBt2HWt5wy1MbtDvzs9rRgTwcDHCZrMat, 2fAb1WmGDDx31ddp2oENzASsFTyzWR4A2ZH6KDQ75TjHPQ4vSSTYxtCQ8scGowEujwKtvgno1Tze5ybfrQBs8ecg, 5iXfT2UjA21C1vJX5PdaLZ89skPVAwmJzQcKhFgdVzKrPuL65cnVDdopR1Zt6qUEkHrieZx8ZJWfaXRvLWan3rja, tdxpPNMRVAe2YuE4DvRWoAPyvDPLkfeG4e6egQeJK8fSZhLEgoDLoK3WoagKjKD86UfjiAwVHFQVQMXvNVgVkJB
+(exit 0)
+
+### settle withdraw
+$ devnet-dvpn settle withdraw --yes
+Nothing to withdraw: your refundable balance is 0.
+(exit 0)
+
+### plans subscribe (first listed plan)
+$ devnet-dvpn plans subscribe 8CRB4PKg1Q7coAqYgvJQWrWq13LEKCRxiinHzuh4SRhL --yes
+Subscribed. CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT  2oXNUEp2WwdJcscLyQdQC1Rx28Snfyto13orpraZiBPXg42YhSGHVmDzpVS6FexuKDPMrHiM3wETR2UtfR5DLqzd
+(exit 0)
+
+### plans subscriptions
+$ devnet-dvpn plans subscriptions
+CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT  plan 8CRB4P…SRhL  expires in 23 h 59 min
+(exit 0)
+
+### connect on the subscription
+$ devnet-dvpn connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --plan CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes
+Connected. Session a5c78a9a-3668-41b0-adf4-d7cce5e394e9  wireguard
+(exit 0)
+
+### plan session: egress = node
+$ bash -c [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ]
+
+(exit 0)
+
+### disconnect plan session
+$ devnet-dvpn disconnect
+Disconnected.
+(exit 0)
+
+### plans close the subscription
+$ devnet-dvpn plans close CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes
+Closed. 3zrQZFY5ruitSarhPHwv7tDyrqstriiBwR5ZCK6JQAQENGGpsPUaoTGg7nHvTEd9Wrd9v7keVWv9MSqgZkZYsAhs
+(exit 0)
+
+### test run (wireguard + v2ray)
+$ devnet-dvpn test run 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3 --max-spend 5 --yes
+[1/2] Measuring your speed without VPN…
+[1/2] 8sV25K…Tdib Checking the server…
+[1/2] 8sV25K…Tdib Connecting…
+[1/2] 8sV25K…Tdib FAIL: Something went wrong. Retry.
+[2/2] DfJukf…Q1K3 Checking the server…
+[2/2] DfJukf…Q1K3 Connecting…
+[2/2] DfJukf…Q1K3 FAIL: Something went wrong. Retry.
+Run 2026-10-21T13-11-52-263Z  2/2  FAST 0  SLOW 0  FAIL 2  without VPN 331.95 Mbps
+FAIL      8sV25K…Tdib  wireguard  United States   Something went wrong. Retry.
+FAIL      DfJukf…Q1K3  v2ray      United States   Something went wrong. Retry.
+(exit 0)
+
+### test history
+$ devnet-dvpn test history
+2026-10-21T13-11-52-263Z  2/2  FAST 0  SLOW 0  FAIL 2
+(exit 0)
+
+### test show --compare
+$ devnet-dvpn test show --compare
+Run 2026-10-21T13-11-52-263Z  2/2  FAST 0  SLOW 0  FAIL 2  without VPN 331.95 Mbps
+FAIL      8sV25K…Tdib  wireguard  United States   Something went wrong. Retry.
+FAIL      DfJukf…Q1K3  v2ray      United States   Something went wrong. Retry.
+No earlier run to compare with.
+(exit 0)
+
+### test export
+$ devnet-dvpn test export --out /home/ubuntu/sweep/test-run.json
+Wrote /home/ubuntu/sweep/test-run.json
+(exit 0)
+
+### test stop (nothing running)
+$ devnet-dvpn test stop
+Asked any running test to stop after its current server.
+(exit 0)
+
+### nodes recent (after sessions)
+$ devnet-dvpn nodes recent
+8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib  United States  wireguard
+FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi  United States  xray
+DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3  United States  v2ray
+8rwN8HCeqM8WiaemKbckxCAjvGErh1LW8v1zPCBcXJbF  United States  hysteria2
+CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ  United States  openvpn
+DrTdBLR3rX3epsqw1gj7JG32s1uskxSfYCdurnKGbcqi  United States  amneziawg
+(exit 0)
+
+### history list
+$ devnet-dvpn history list
+2026-10-21T13:10:59.000Z  8sV25K…Tdib  wireguard  down 0 B  spent 0 tDVPN  closed by client
+2026-10-21T11:02:12.000Z  FFmjhX…jcgi  xray  down 0 B  spent 0.001 tDVPN  closed by client
+2026-10-21T11:01:25.000Z  8sV25K…Tdib  wireguard  down 0 B  spent 0 tDVPN  closed by client
+2026-10-21T11:00:40.000Z  8sV25K…Tdib  wireguard  down 0 B  spent 0 tDVPN  closed by client
+2026-10-21T11:00:12.000Z  DfJukf…Q1K3  v2ray  down 0 B  spent 0.001 tDVPN  closed by client
+2026-10-21T10:59:36.000Z  FFmjhX…jcgi  xray  down 0 B  spent 0.001 tDVPN  closed by client
+2026-10-21T10:59:09.000Z  8rwN8H…XJbF  hysteria2  down 84 B  spent 0.001 tDVPN  closed by client
+2026-10-21T10:58:33.000Z  CZRGDk…8fXQ  openvpn  down 0 B  spent 0.001 tDVPN  closed by client
+2026-10-21T10:57:43.000Z  DrTdBL…bcqi  amneziawg  down 0 B  spent 0 tDVPN  closed by client
+2026-10-21T10:56:51.000Z  8sV25K…Tdib  wireguard  down 0 B  spent 0 tDVPN  closed by client
+(exit 0)
+
+### history summary
+$ devnet-dvpn history summary
+Sessions   10
+Spent      0.005 tDVPN (last 30 days 0.005)
+Data       180 B
+  FFmjhX…jcgi United States    2 sessions  0.002 tDVPN
+  CZRGDk…8fXQ United States    1 sessions  0.001 tDVPN
+  8rwN8H…XJbF United States    1 sessions  0.001 tDVPN
+  DfJukf…Q1K3 United States    1 sessions  0.001 tDVPN
+  DrTdBL…bcqi United States    1 sessions  0 tDVPN
+  8sV25K…Tdib United States    4 sessions  0 tDVPN
+(exit 0)
+
+### sessions
+$ devnet-dvpn sessions
+a5c78a9a-3668-41b0-adf4-d7cce5e394e9  ended   8sV25K…Tdib  wireguard  spent 0  Disconnected.
+394898db-3a14-4a82-9ec2-724fe0b75c6b  ended   FFmjhX…jcgi  xray  spent 0.001  Disconnected.
+7cdc3b18-0e9b-40d7-9fa1-9e7935491fd5  ended   8sV25K…Tdib  wireguard  spent 0  Disconnected.
+a3e4b29e-759c-49a3-81f2-eebca1103632  ended   8sV25K…Tdib  wireguard  spent 0  Disconnected.
+d46237f8-eccb-4928-b6e5-e01b076d7f41  ended   DfJukf…Q1K3  v2ray  spent 0.001  Disconnected.
+eb15c323-c315-4a32-bb85-abf9d5ce6c46  ended   FFmjhX…jcgi  xray  spent 0.001  Disconnected.
+19fdedaa-b116-4bb6-8031-1c27bf370855  ended   8rwN8H…XJbF  hysteria2  spent 0.001  Disconnected.
+86872cf9-7551-412e-bfcf-727741ceba22  ended   CZRGDk…8fXQ  openvpn  spent 0.001  Disconnected.
+c846dab5-ac74-4223-8512-f408569d0e47  ended   DrTdBL…bcqi  amneziawg  spent 0  Disconnected.
+0a87d017-5cc1-4519-9977-966e662f8b7b  ended   8sV25K…Tdib  wireguard  spent 0  Disconnected.
+(exit 0)
+
+### tickets
+$ devnet-dvpn tickets
+753893ce8403  sub CjHGks…bMiT  node 8sV25K…Tdib
+(exit 0)
+
+### final: no leftovers, direct egress
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=$(pgrep -fc '^(/usr/local/lib/devnet-dvpn/[a-z0-9]+/(v2ray|xray|hysteria2) |(/usr/s?bin/)?openvpn .*/var/lib/dvpnd)' || true);
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; no_leftovers && [ "$(egress)" = '34.123.93.65' ]
+nft=0 links=0 procs=0 egress=34.123.93.65
+(exit 0)

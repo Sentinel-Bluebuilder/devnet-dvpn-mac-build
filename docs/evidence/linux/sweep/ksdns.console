@@ -1,0 +1,50 @@
+ok   direct egress before = 34.123.93.65
+ok   kill switch on, Cloudflare DNS, resolvectl
+ok   kill switch reads back on
+  … 7 s
+ok   plans subscribe
+  … 7 s
+ok   ks wireguard: connect on the plan
+ok   ks wireguard: egress = node
+ok   ks wireguard: nft table inet dvpnd is up
+ok   ks wireguard: names resolve with the kill switch on
+ok   ks wireguard: VPN DNS 1.1.1.1 set on dvpn-wg-client
+ok   ks wireguard: tunnel broken → no direct leak (request fails)
+ok   ks wireguard: tunnel broken → never the direct IP
+ok   ks wireguard: disconnect
+ok   ks wireguard: restore network
+ok   ks wireguard: after restore: no leftovers, direct egress back
+  … 7 s
+ok   ks amneziawg: connect on the plan
+ok   ks amneziawg: egress = node
+ok   ks amneziawg: nft table inet dvpnd is up
+ok   ks amneziawg: names resolve with the kill switch on
+ok   ks amneziawg: VPN DNS 1.1.1.1 set on dvpn-awg-client
+ok   ks amneziawg: tunnel broken → no direct leak (request fails)
+ok   ks amneziawg: tunnel broken → never the direct IP
+ok   ks amneziawg: disconnect
+ok   ks amneziawg: restore network
+ok   ks amneziawg: after restore: no leftovers, direct egress back
+  … 7 s
+ok   plans close
+  … 7 s
+ok   plans subscribe
+  … 7 s
+FAIL ks openvpn: connect on the plan (exit 1, want 0) :: Error: This plan gives access on 2 servers, and you already use them. Connect to one of those, or get another plan. → Pick a server you already use
+  … 7 s
+FAIL ks hysteria2: connect on the plan (exit 1, want 0) :: Error: This plan gives access on 2 servers, and you already use them. Connect to one of those, or get another plan. → Pick a server you already use
+  … 7 s
+ok   plans close
+  … 7 s
+ok   plans subscribe
+  … 7 s
+FAIL ks v2ray: connect on the plan (exit 1, want 0) :: Error: This plan gives access on 2 servers, and you already use them. Connect to one of those, or get another plan. → Pick a server you already use
+  … 7 s
+FAIL ks xray: connect on the plan (exit 1, want 0) :: Error: This plan gives access on 2 servers, and you already use them. Connect to one of those, or get another plan. → Pick a server you already use
+  … 7 s
+ok   plans close
+  … 7 s
+ok   kill switch off again
+ok   final: direct egress, nothing left
+
+ksdns: passed 31  failed 4  (details /home/ubuntu/sweep/ksdns.log)

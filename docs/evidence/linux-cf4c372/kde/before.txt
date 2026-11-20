@@ -1,0 +1,5 @@
+ProxyType=1
+socksProxy=
+httpProxy=http://corp.example 3128
+httpsProxy=
+NoProxyFor=localhost

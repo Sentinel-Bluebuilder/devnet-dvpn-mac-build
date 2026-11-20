@@ -1,0 +1,35 @@
+PASS	direct egress before = 34.123.93.65	check	
+PASS	kill switch on, Cloudflare DNS, resolvectl	daemon set --kill-switch on --dns cloudflare --dns-mode resolvectl --yes	Applied and restarted.
+PASS	kill switch reads back on	daemon settings	killSwitch     on allowLan       false
+PASS	plans subscribe	plans subscribe 8CRB4PKg1Q7coAqYgvJQWrWq13LEKCRxiinHzuh4SRhL --yes	Subscribed. CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT  5BDRraqtQAoJp36fqUk28DAUA8WksxNhVcj1ePsLo6YSXtPWBqZ1YAuACBo8mEFUFp12i19qoAmbMGkTHELA9sgs
+PASS	ks wireguard: connect on the plan	connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --plan CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Connected. Session 79bb5ce4-dbda-40a8-8582-f0cf9a7c5279  wireguard
+PASS	ks wireguard: egress = node	check	
+PASS	ks wireguard: nft table inet dvpnd is up	check	
+PASS	ks wireguard: names resolve with the kill switch on	check	
+PASS	ks wireguard: VPN DNS 1.1.1.1 set on dvpn-wg-client	check	
+PASS	ks wireguard: tunnel broken → no direct leak (request fails)	check	
+PASS	ks wireguard: tunnel broken → never the direct IP	check	
+PASS	ks wireguard: disconnect	disconnect	Disconnected.
+PASS	ks wireguard: restore network	daemon restore-network	Network restored.
+PASS	ks wireguard: after restore: no leftovers, direct egress back	check	nft=0 links=0 procs=0 egress=34.123.93.65
+PASS	ks amneziawg: connect on the plan	connect DrTdBLR3rX3epsqw1gj7JG32s1uskxSfYCdurnKGbcqi --plan CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Connected. Session 53e938fa-78d2-4d9a-b2b2-e7172ca30d00  amneziawg
+PASS	ks amneziawg: egress = node	check	
+PASS	ks amneziawg: nft table inet dvpnd is up	check	
+PASS	ks amneziawg: names resolve with the kill switch on	check	
+PASS	ks amneziawg: VPN DNS 1.1.1.1 set on dvpn-awg-client	check	
+PASS	ks amneziawg: tunnel broken → no direct leak (request fails)	check	
+PASS	ks amneziawg: tunnel broken → never the direct IP	check	
+PASS	ks amneziawg: disconnect	disconnect	Disconnected.
+PASS	ks amneziawg: restore network	daemon restore-network	Network restored.
+PASS	ks amneziawg: after restore: no leftovers, direct egress back	check	nft=0 links=0 procs=0 egress=34.123.93.65
+PASS	plans close	plans close CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Closed. 5mMuY4RLNzhxGnNEf27ASEB4r5MPWxAMZrhYjgtmGgT756jtb9jtJesCsHeahcDQ4gLJUNqXKGLpB4pCqQBKH5Sj
+PASS	plans subscribe	plans subscribe 8CRB4PKg1Q7coAqYgvJQWrWq13LEKCRxiinHzuh4SRhL --yes	Subscribed. CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT  3EjnBdm25nz51NhavPCofRkv67pdBTgvzDumqQHQzC26ecAqfovSu5uSJxTmWTpuKwbi7QhK2KkF76nfArR7BafJ
+FAIL	ks openvpn: connect on the plan (exit 1, want 0)	connect CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ --plan CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Error: This plan gives access on 2 servers, and you already use them. Connect to one of those, or get another plan. → Pick a server you already use
+FAIL	ks hysteria2: connect on the plan (exit 1, want 0)	connect 8rwN8HCeqM8WiaemKbckxCAjvGErh1LW8v1zPCBcXJbF --plan CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Error: This plan gives access on 2 servers, and you already use them. Connect to one of those, or get another plan. → Pick a server you already use
+PASS	plans close	plans close CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Closed. 4YXWEMGXai9cew5xaXxriRiAxvjbXUfotMg4VFemaJHYZrZhv6PnepxGfZsZHxv1L8UVNyqYxppYAuB6nTS6kdwF
+PASS	plans subscribe	plans subscribe 8CRB4PKg1Q7coAqYgvJQWrWq13LEKCRxiinHzuh4SRhL --yes	Subscribed. CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT  5t2zpufUS9PSDkJAXwXfxf2o5tEK4LNBeaizB2kq3yurfiZ7FUavM7LkZbpskdUCAcbVahhPNck3xue9iPEcPS4H
+FAIL	ks v2ray: connect on the plan (exit 1, want 0)	connect DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3 --plan CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Error: This plan gives access on 2 servers, and you already use them. Connect to one of those, or get another plan. → Pick a server you already use
+FAIL	ks xray: connect on the plan (exit 1, want 0)	connect FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi --plan CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Error: This plan gives access on 2 servers, and you already use them. Connect to one of those, or get another plan. → Pick a server you already use
+PASS	plans close	plans close CjHGksDzttiyp4avWNnowEs2koCGgCBbzY8o2oSSbMiT --yes	Closed. 37FaMSxat2AHotUsRX6MUASyJnt33dLdS8RAXEVxxYm4HvsAMKnMdsrqgXAvBhMt19sUH6o25CAwySuCpPXxD4RW
+PASS	kill switch off again	daemon set --kill-switch off --yes	Applied and restarted.
+PASS	final: direct egress, nothing left	check	nft=0 links=0 procs=0 egress=34.123.93.65

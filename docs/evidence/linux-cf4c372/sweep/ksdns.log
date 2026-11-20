@@ -1,0 +1,529 @@
+
+### direct egress before = 34.123.93.65
+$ bash -c [ -n '34.123.93.65' ] && [ '34.123.93.65' != '35.232.17.117' ]
+
+(exit 0)
+
+### kill switch on, Cloudflare DNS, resolvectl
+$ devnet-dvpn daemon set --kill-switch on --dns cloudflare --dns-mode resolvectl --yes
+Applied and restarted.
+(exit 0)
+
+### kill switch reads back on
+$ devnet-dvpn daemon settings
+killSwitch     on
+allowLan       false
+dnsServers     1.1.1.1, 1.0.0.1
+dnsMode        resolvectl
+basis          per_gb
+escrow         1000 tDVPN
+prepayBytes    1000 MB
+prepaySeconds  60 min
+rpcUrl         https://api.devnet.solana.com
+rpcWsUrl       wss://api.devnet.solana.com
+(exit 0)
+
+### ks wireguard: connect (gb)
+$ devnet-dvpn connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --units 1 --yes
+Connected. Session f0dbc53a-16fb-4513-bc0f-eecf3972a250  wireguard
+(exit 0)
+
+### ks wireguard: egress = node
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12  https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### ks wireguard: nft table inet dvpnd is up
+$ bash -c sudo nft list table inet dvpnd >/dev/null
+
+(exit 0)
+
+### ks wireguard: names resolve with the kill switch on
+$ bash -c getent hosts example.com >/dev/null || curl -s -m 12  -o /dev/null -w '%{http_code}' https://example.com | grep -q 200
+
+(exit 0)
+
+### ks wireguard: VPN DNS 1.1.1.1 set on dvpn-wg-client
+$ bash -c resolvectl dns 'dvpn-wg-client' | grep -q 1.1.1.1
+
+(exit 0)
+
+### ks wireguard: path to the server lost → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks wireguard: path to the server lost → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks wireguard: tunnel broken → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks wireguard: tunnel broken → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks wireguard: disconnect
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### ks wireguard: restore network
+$ devnet-dvpn daemon restore-network
+Network restored.
+(exit 0)
+
+### ks wireguard: after restore: no leftovers, direct egress back
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=0;
+    for pid in $(pgrep -x 'v2ray|xray|hysteria2');
+    do
+        sudo readlink "/proc/$pid/exe" 2> /dev/null | grep -q '^/usr/local/lib/devnet-dvpn/' && p=$((p + 1));
+    done;
+    for pid in $(pgrep -x openvpn);
+    do
+        sudo tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q '/var/lib/dvpnd/' && p=$((p + 1));
+    done;
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; for i in 1 2 3 4; do no_leftovers && [ "$(egress)" = '34.123.93.65' ] && exit 0; sleep 5; done; no_leftovers; exit 1
+nft=0 links=0 procs=0 egress=34.123.93.65
+(exit 0)
+
+### ks amneziawg: connect (gb)
+$ devnet-dvpn connect DrTdBLR3rX3epsqw1gj7JG32s1uskxSfYCdurnKGbcqi --units 1 --yes
+Connected. Session 05c23963-7cb7-4a29-8054-16613c7a8950  amneziawg
+(exit 0)
+
+### ks amneziawg: egress = node
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12  https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### ks amneziawg: nft table inet dvpnd is up
+$ bash -c sudo nft list table inet dvpnd >/dev/null
+
+(exit 0)
+
+### ks amneziawg: names resolve with the kill switch on
+$ bash -c getent hosts example.com >/dev/null || curl -s -m 12  -o /dev/null -w '%{http_code}' https://example.com | grep -q 200
+
+(exit 0)
+
+### ks amneziawg: VPN DNS 1.1.1.1 set on dvpn-awg-client
+$ bash -c resolvectl dns 'dvpn-awg-client' | grep -q 1.1.1.1
+
+(exit 0)
+
+### ks amneziawg: path to the server lost → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks amneziawg: path to the server lost → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks amneziawg: tunnel broken → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks amneziawg: tunnel broken → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks amneziawg: disconnect
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### ks amneziawg: restore network
+$ devnet-dvpn daemon restore-network
+Network restored.
+(exit 0)
+
+### ks amneziawg: after restore: no leftovers, direct egress back
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=0;
+    for pid in $(pgrep -x 'v2ray|xray|hysteria2');
+    do
+        sudo readlink "/proc/$pid/exe" 2> /dev/null | grep -q '^/usr/local/lib/devnet-dvpn/' && p=$((p + 1));
+    done;
+    for pid in $(pgrep -x openvpn);
+    do
+        sudo tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q '/var/lib/dvpnd/' && p=$((p + 1));
+    done;
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; for i in 1 2 3 4; do no_leftovers && [ "$(egress)" = '34.123.93.65' ] && exit 0; sleep 5; done; no_leftovers; exit 1
+nft=0 links=0 procs=0 egress=34.123.93.65
+(exit 0)
+
+### ks openvpn: connect (gb)
+$ devnet-dvpn connect CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ --units 1 --yes
+Connected. Session 6fa6f65c-5816-4370-930d-be0e8cdd2b71  openvpn
+(exit 0)
+
+### ks openvpn: egress = node
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12  https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### ks openvpn: nft table inet dvpnd is up
+$ bash -c sudo nft list table inet dvpnd >/dev/null
+
+(exit 0)
+
+### ks openvpn: names resolve with the kill switch on
+$ bash -c getent hosts example.com >/dev/null || curl -s -m 12  -o /dev/null -w '%{http_code}' https://example.com | grep -q 200
+
+(exit 0)
+
+### ks openvpn: path to the server lost → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks openvpn: path to the server lost → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks openvpn: tunnel broken → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 1)
+
+### ks openvpn: tunnel broken → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 1)
+
+### ks openvpn: disconnect
+$ devnet-dvpn disconnect
+No active session.
+(exit 0)
+
+### ks openvpn: restore network
+$ devnet-dvpn daemon restore-network
+Network restored.
+(exit 0)
+
+### ks openvpn: after restore: no leftovers, direct egress back
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=0;
+    for pid in $(pgrep -x 'v2ray|xray|hysteria2');
+    do
+        sudo readlink "/proc/$pid/exe" 2> /dev/null | grep -q '^/usr/local/lib/devnet-dvpn/' && p=$((p + 1));
+    done;
+    for pid in $(pgrep -x openvpn);
+    do
+        sudo tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q '/var/lib/dvpnd/' && p=$((p + 1));
+    done;
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; for i in 1 2 3 4; do no_leftovers && [ "$(egress)" = '34.123.93.65' ] && exit 0; sleep 5; done; no_leftovers; exit 1
+nft=0 links=0 procs=0 egress=34.123.93.65
+(exit 0)
+
+### ks hysteria2: connect (gb)
+$ devnet-dvpn connect 8rwN8HCeqM8WiaemKbckxCAjvGErh1LW8v1zPCBcXJbF --units 1 --yes
+Connected. Session 15a04829-2443-44cd-bb1a-232596bdef71  hysteria2
+(exit 0)
+
+### ks hysteria2: egress = node
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12  https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### ks hysteria2: nft table inet dvpnd is up
+$ bash -c sudo nft list table inet dvpnd >/dev/null
+sudo: unable to resolve host ddv-linux-1.us-central1-a.c.ddv-node-test-5821.internal: Temporary failure in name resolution
+(exit 0)
+
+### ks hysteria2: names resolve with the kill switch on
+$ bash -c getent hosts example.com >/dev/null || curl -s -m 12  -o /dev/null -w '%{http_code}' https://example.com | grep -q 200
+
+(exit 0)
+
+### ks hysteria2: VPN DNS 1.1.1.1 set on hy2-client
+$ bash -c resolvectl dns 'hy2-client' | grep -q 1.1.1.1
+
+(exit 0)
+
+### ks hysteria2: path to the server lost → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks hysteria2: path to the server lost → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks hysteria2: tunnel broken → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 1)
+
+### ks hysteria2: tunnel broken → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 1)
+
+### ks hysteria2: disconnect
+$ devnet-dvpn disconnect
+No active session.
+(exit 0)
+
+### ks hysteria2: restore network
+$ devnet-dvpn daemon restore-network
+Network restored.
+(exit 0)
+
+### ks hysteria2: after restore: no leftovers, direct egress back
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=0;
+    for pid in $(pgrep -x 'v2ray|xray|hysteria2');
+    do
+        sudo readlink "/proc/$pid/exe" 2> /dev/null | grep -q '^/usr/local/lib/devnet-dvpn/' && p=$((p + 1));
+    done;
+    for pid in $(pgrep -x openvpn);
+    do
+        sudo tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q '/var/lib/dvpnd/' && p=$((p + 1));
+    done;
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; for i in 1 2 3 4; do no_leftovers && [ "$(egress)" = '34.123.93.65' ] && exit 0; sleep 5; done; no_leftovers; exit 1
+nft=0 links=0 procs=0 egress=34.123.93.65
+(exit 0)
+
+### ks v2ray: connect (gb)
+$ devnet-dvpn connect DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3 --units 1 --yes
+Connected. Session 45905da3-4c23-422e-be7e-2cfe3c995346  v2ray  SOCKS 127.0.0.1:1080
+(exit 0)
+
+### ks v2ray: egress = node via SOCKS
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12 --socks5-hostname 127.0.0.1:1080 https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### ks v2ray: nft table inet dvpnd is up
+$ bash -c sudo nft list table inet dvpnd >/dev/null
+
+(exit 0)
+
+### ks v2ray: names resolve with the kill switch on
+$ bash -c getent hosts example.com >/dev/null || curl -s -m 12 --socks5-hostname 127.0.0.1:1080 -o /dev/null -w '%{http_code}' https://example.com | grep -q 200
+
+(exit 0)
+
+### ks v2ray: a direct (non-proxied) request is blocked
+$ bash -c ! curl -s -m 8 https://api.ipify.org
+
+(exit 0)
+
+### ks v2ray: path to the server lost → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks v2ray: path to the server lost → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks v2ray: tunnel broken → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks v2ray: tunnel broken → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks v2ray: disconnect
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### ks v2ray: restore network
+$ devnet-dvpn daemon restore-network
+Network restored.
+(exit 0)
+
+### ks v2ray: after restore: no leftovers, direct egress back
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=0;
+    for pid in $(pgrep -x 'v2ray|xray|hysteria2');
+    do
+        sudo readlink "/proc/$pid/exe" 2> /dev/null | grep -q '^/usr/local/lib/devnet-dvpn/' && p=$((p + 1));
+    done;
+    for pid in $(pgrep -x openvpn);
+    do
+        sudo tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q '/var/lib/dvpnd/' && p=$((p + 1));
+    done;
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; for i in 1 2 3 4; do no_leftovers && [ "$(egress)" = '34.123.93.65' ] && exit 0; sleep 5; done; no_leftovers; exit 1
+nft=0 links=0 procs=0 egress=34.123.93.65
+(exit 0)
+
+### ks xray: connect (gb)
+$ devnet-dvpn connect FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi --units 1 --yes
+Connected. Session d5094732-d796-4849-b181-b6dce21ee177  xray  SOCKS 127.0.0.1:1080
+(exit 0)
+
+### ks xray: egress = node via SOCKS
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12 --socks5-hostname 127.0.0.1:1080 https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### ks xray: nft table inet dvpnd is up
+$ bash -c sudo nft list table inet dvpnd >/dev/null
+
+(exit 0)
+
+### ks xray: names resolve with the kill switch on
+$ bash -c getent hosts example.com >/dev/null || curl -s -m 12 --socks5-hostname 127.0.0.1:1080 -o /dev/null -w '%{http_code}' https://example.com | grep -q 200
+
+(exit 0)
+
+### ks xray: a direct (non-proxied) request is blocked
+$ bash -c ! curl -s -m 8 https://api.ipify.org
+
+(exit 0)
+
+### ks xray: path to the server lost → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks xray: path to the server lost → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks xray: tunnel broken → no direct leak (request fails)
+$ bash -c out=$(curl -s -m 10 https://api.ipify.org); [ -z "$out" ] || [ "$out" = '35.232.17.117' ]
+
+(exit 0)
+
+### ks xray: tunnel broken → never the direct IP
+$ bash -c [ "$(curl -s -m 10 https://api.ipify.org)" != '34.123.93.65' ]
+
+(exit 0)
+
+### ks xray: disconnect
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### ks xray: restore network
+$ devnet-dvpn daemon restore-network
+Network restored.
+(exit 0)
+
+### ks xray: after restore: no leftovers, direct egress back
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=0;
+    for pid in $(pgrep -x 'v2ray|xray|hysteria2');
+    do
+        sudo readlink "/proc/$pid/exe" 2> /dev/null | grep -q '^/usr/local/lib/devnet-dvpn/' && p=$((p + 1));
+    done;
+    for pid in $(pgrep -x openvpn);
+    do
+        sudo tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q '/var/lib/dvpnd/' && p=$((p + 1));
+    done;
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; for i in 1 2 3 4; do no_leftovers && [ "$(egress)" = '34.123.93.65' ] && exit 0; sleep 5; done; no_leftovers; exit 1
+nft=0 links=0 procs=0 egress=34.123.93.65
+(exit 0)
+
+### kill switch off again
+$ devnet-dvpn daemon set --kill-switch off --yes
+Applied and restarted.
+(exit 0)
+
+### final: direct egress, nothing left
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=0;
+    for pid in $(pgrep -x 'v2ray|xray|hysteria2');
+    do
+        sudo readlink "/proc/$pid/exe" 2> /dev/null | grep -q '^/usr/local/lib/devnet-dvpn/' && p=$((p + 1));
+    done;
+    for pid in $(pgrep -x openvpn);
+    do
+        sudo tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q '/var/lib/dvpnd/' && p=$((p + 1));
+    done;
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; no_leftovers && [ "$(egress)" = '34.123.93.65' ]
+nft=0 links=0 procs=0 egress=34.123.93.65
+(exit 0)

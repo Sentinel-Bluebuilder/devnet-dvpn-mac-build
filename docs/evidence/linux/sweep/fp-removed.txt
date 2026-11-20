@@ -1,0 +1,18 @@
+== package
+devnet-dvpn-linux 0.1.0 deinstall ok config-files
+== files
+/var/lib/devnet-dvpn
+/var/lib/dvpnd/client
+== service
+inactive
+not-found
+== apparmor
+0
+== group
+dvpn:x:988:ubuntu
+== nft
+== links
+== rules
+== procs
+== egress
+34.123.93.65

@@ -1,0 +1,174 @@
+# ─── macos-rc8 — rc.8 on real Apple silicon (GitHub macos-14): build + unit tests, then live ───
+# build: npm ci, typecheck, unit tests, release:mac --arch arm64 (unsigned ad hoc: identity null +
+#        build/mac/adhoc-sign.cjs; CSC_IDENTITY_AUTO_DISCOVERY=false), SHA256SUMS, artifacts.
+#        The pinned darwin dvpnd + patched xray (build/deps.lock.json "local") are not in git; they are
+#        taken from the public rc.4 arm64 .zip, built from the same final6.16 (5b0a398). If the shipped
+#        bytes differ from the lock (codesign re-signs Mach-O), this CI checkout's lock is pointed at
+#        the shipped bytes and the run summary says so: daemon = the rc.4-shipped final6.16 bytes.
+# live:  install the .dmg with sudo, link the CLI, run scripts/e2e/mac/gha-live.sh (owned by AC-MAC-2)
+#        with secrets.DVPN_TEST_KEY in a 0600 file; upload evidence/.
+name: macos-rc8
+
+on:
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Run the live job after build'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  RC4_REPO: Sentinel-Bluebuilder/sentinel-solana-dvpn-macos
+  RC4_TAG: v0.3.0-rc4
+  RC4_ZIP: Devnet-dVPN-0.3.0-rc.4-arm64-mac.zip
+  DVPND_DIR: ${{ github.workspace }}/.ci-dvpnd
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run -s typecheck 2>&1 | tee typecheck.log
+
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          npx vitest run tests/unit tests/platform 2>&1 | tee unit-tests.log
+
+      - name: Pinned darwin binaries from the rc.4 arm64 zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$DVPND_DIR" /tmp/rc4
+          gh release download "$RC4_TAG" -R "$RC4_REPO" -p "$RC4_ZIP" -D /tmp/rc4
+          shasum -a 256 "/tmp/rc4/$RC4_ZIP" | tee -a "$GITHUB_STEP_SUMMARY"
+          ditto -x -k "/tmp/rc4/$RC4_ZIP" /tmp/rc4/x
+          res="$(find /tmp/rc4/x -type d -path '*Devnet dVPN.app/Contents/Resources/resources/bin' | head -1)"
+          test -n "$res" || { echo "no resources/bin in the rc.4 app"; exit 1; }
+          echo '### Pinned darwin binaries' >> "$GITHUB_STEP_SUMMARY"
+          for name in dvpnd xray; do
+            src=$(jq -r --arg n "$name" '.local[] | select(.arch=="arm64" and .name==$n) | .src' build/deps.lock.json)
+            rel=$(jq -r --arg n "$name" '.local[] | select(.arch=="arm64" and .name==$n) | .path' build/deps.lock.json)
+            want=$(jq -r --arg n "$name" '.local[] | select(.arch=="arm64" and .name==$n) | .sha256' build/deps.lock.json)
+            from="$res/${rel#resources/bin/}"
+            test -f "$from" || { echo "rc.4 app has no ${rel#resources/bin/}"; exit 1; }
+            cp "$from" "$DVPND_DIR/$src"
+            got=$(shasum -a 256 "$DVPND_DIR/$src" | cut -d' ' -f1)
+            if [ "$got" != "$want" ]; then
+              cp "$from" /tmp/rc4/unsigned && codesign --remove-signature /tmp/rc4/unsigned || true
+              ug=$(shasum -a 256 /tmp/rc4/unsigned | cut -d' ' -f1)
+              if [ "$ug" = "$want" ]; then
+                cp /tmp/rc4/unsigned "$DVPND_DIR/$src"; got=$ug
+                echo "- $name: lock match after codesign --remove-signature ($got)" >> "$GITHUB_STEP_SUMMARY"
+              else
+                # CI-only lock override: the bytes users run today in rc.4 (same final6.16 build).
+                jq --arg n "$name" --arg s "$got" '(.local[] | select(.arch=="arm64" and .name==$n) | .sha256) = $s' \
+                  build/deps.lock.json > /tmp/lock.json && mv /tmp/lock.json build/deps.lock.json
+                echo "- $name: **CI lock override** — daemon/xray = the rc.4-shipped final6.16 bytes, sha256 $got (lock pinned $want; unsigned $ug)" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            else
+              echo "- $name: lock match ($got)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+      - name: release:mac (arm64)
+        run: |
+          set -o pipefail
+          node scripts/release-mac.mjs --arch arm64 --skip-tests --allow-same-version 2>&1 | tee release.log
+
+      - name: SHA-256
+        run: |
+          set -euo pipefail
+          cd dist
+          shasum -a 256 *.dmg *.zip | tee SHA256SUMS
+          { echo '### Packages (arm64, ad hoc signed, not notarized)'; echo '```'; cat SHA256SUMS; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-rc8-arm64
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/SHA256SUMS
+            dist/SHA256SUMS.txt
+            typecheck.log
+            unit-tests.log
+            release.log
+
+  live:
+    needs: build
+    if: ${{ inputs.live }}
+    runs-on: macos-15
+    # Shared with macos-pathb.yml: never two devnet chain tests at once (sequential chain rule).
+    concurrency:
+      group: devnet-chain
+      cancel-in-progress: false
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-rc8-arm64
+          path: pkg
+
+      - name: Install the .dmg (sudo)
+        run: |
+          set -euo pipefail
+          (cd pkg/dist && shasum -a 256 -c SHA256SUMS)
+          dmg=$(ls pkg/dist/*.dmg | head -1)
+          mnt=$(hdiutil attach -nobrowse -readonly "$dmg" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)
+          sudo rm -rf "/Applications/Devnet dVPN.app"
+          sudo ditto "$mnt/Devnet dVPN.app" "/Applications/Devnet dVPN.app"
+          hdiutil detach "$mnt"
+          sudo xattr -dr com.apple.quarantine "/Applications/Devnet dVPN.app"
+          sudo mkdir -p /usr/local/bin
+          sudo ln -sf "/Applications/Devnet dVPN.app/Contents/Resources/bin/devnet-dvpn" /usr/local/bin/devnet-dvpn
+          devnet-dvpn version --json
+
+      - name: Drivers (Homebrew, as the user)
+        run: brew install wireguard-tools wireguard-go openvpn bash jq || true
+
+      - name: Live rows (gha-live.sh)
+        env:
+          DVPN_TEST_KEY: ${{ secrets.DVPN_TEST_KEY }}
+          EXTRA_ROWS_FILE: scripts/e2e/mac/gha-mac-rows.sh
+        run: |
+          set -euo pipefail
+          test -n "$DVPN_TEST_KEY" || { echo "secret DVPN_TEST_KEY is not set"; exit 1; }
+          umask 077
+          key="$RUNNER_TEMP/dvpn-test-key.json"
+          printf '%s' "$DVPN_TEST_KEY" > "$key"
+          chmod 600 "$key"
+          DVPN_KEYFILE="$key" bash scripts/e2e/mac/gha-live.sh
+
+      - name: Result
+        if: always()
+        run: test -f evidence/RESULT.md && cat evidence/RESULT.md >> "$GITHUB_STEP_SUMMARY" || echo 'no RESULT.md' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-rc8-live-evidence
+          path: evidence/
+
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/dvpn-test-key.json"

@@ -1,0 +1,89 @@
+{
+  "id": "2026-10-21T15-13-22-077Z",
+  "startedAt": 1792595602077,
+  "endedAt": 1792595657833,
+  "baselineMbps": 336.13,
+  "maxSpend": "5000000",
+  "estimatedSpend": "2000",
+  "total": 2,
+  "done": 2,
+  "stopped": false,
+  "results": [
+    {
+      "node": "8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib",
+      "service": "wireguard",
+      "country": "United States",
+      "verdict": "SLOW",
+      "reason": "11.86 Mbps, under 67.2 Mbps (20% of your 336.13 Mbps without VPN).",
+      "basis": "per_hour",
+      "connectMs": 15662,
+      "exitIp": "35.232.17.117",
+      "expectedIp": "35.232.17.117",
+      "mbps": 11.86,
+      "checks": [
+        {
+          "name": "connect",
+          "ok": true,
+          "detail": "15.7 s"
+        },
+        {
+          "name": "exit IP",
+          "ok": true,
+          "detail": "35.232.17.117"
+        },
+        {
+          "name": "DNS",
+          "ok": true,
+          "detail": "resolver system"
+        },
+        {
+          "name": "speed",
+          "ok": true,
+          "detail": "11.86 Mbps (speed.cloudflare.com)"
+        }
+      ],
+      "channel": "DvwwJ5nAdNmRyGVu27CQzGjmRJpWQvsfNSLvC1JPX2qi",
+      "error": null,
+      "startedAt": 1792595602379,
+      "endedAt": 1792595643528
+    },
+    {
+      "node": "DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3",
+      "service": "v2ray",
+      "country": "United States",
+      "verdict": "SLOW",
+      "reason": "15.93 Mbps, under 67.2 Mbps (20% of your 336.13 Mbps without VPN).",
+      "basis": "per_hour",
+      "connectMs": 5182,
+      "exitIp": "35.232.17.117",
+      "expectedIp": "35.232.17.117",
+      "mbps": 15.93,
+      "checks": [
+        {
+          "name": "connect",
+          "ok": true,
+          "detail": "5.2 s"
+        },
+        {
+          "name": "exit IP",
+          "ok": true,
+          "detail": "35.232.17.117"
+        },
+        {
+          "name": "DNS",
+          "ok": true,
+          "detail": "resolved at the VPN exit (SOCKS)"
+        },
+        {
+          "name": "speed",
+          "ok": true,
+          "detail": "15.93 Mbps (speed.cloudflare.com)"
+        }
+      ],
+      "channel": "AXvVXsRHKP2d4ZtEUYAcPJvENkS922uEjzAJ6nsdrG3W",
+      "error": null,
+      "startedAt": 1792595643529,
+      "endedAt": 1792595657832
+    }
+  ]
+}

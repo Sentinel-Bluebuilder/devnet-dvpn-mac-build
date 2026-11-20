@@ -1,0 +1,62 @@
+ok   direct egress before sessions = 34.123.93.65
+FAIL connect wireguard per GB (exit 1, want 0) :: Error: The payment transaction was rejected by the network program. → Try stream payment
+  … 7 s
+FAIL connect amneziawg per GB (exit 1, want 0) :: Error: The payment transaction was rejected by the network program. → Try stream payment
+  … 7 s
+FAIL connect openvpn per GB (exit 1, want 0) :: Error: The payment transaction was rejected by the network program. → Try stream payment
+  … 7 s
+FAIL connect hysteria2 per GB (exit 1, want 0) :: Error: The payment transaction was rejected by the network program. → Try stream payment
+  … 7 s
+FAIL connect xray per GB (exit 1, want 0) :: Error: The payment transaction was rejected by the network program. → Try stream payment
+  … 7 s
+FAIL connect v2ray per GB (exit 1, want 0) :: Error: The payment transaction was rejected by the network program. → Try stream payment
+ok   proxy status shows the SOCKS endpoint
+FAIL v2ray: SOCKS  egress = node :: curl: (2) no URL specified curl: try 'curl --help' or 'curl --manual' for more information
+FAIL proxy on → GNOME mode manual + socks 127.0.0.1; proxy off → none :: 
+FAIL proxy browser (Chrome, own profile, through SOCKS) (exit 1, want 0) :: Error: The current session has no SOCKS endpoint (only V2Ray/Xray sessions do). Nothing was opened.
+ok   browser window runs with --proxy-server=socks5
+  … 7 s
+FAIL connect --switch v2ray → wireguard (exit 1, want 0) :: Error: The payment transaction was rejected by the network program. → Try stream payment
+FAIL after switch: egress = node :: 
+  … 7 s
+ok   disconnect after switch
+  … 7 s
+FAIL connect wireguard per hour (exit 1, want 0) :: Error: Something went wrong. Retry. → Retry
+FAIL per hour: egress = node :: 
+  … 7 s
+ok   disconnect per hour
+  … 7 s
+FAIL connect --follow (ends on disconnect) (exit 1, want 0) :: Error: The payment transaction was rejected by the network program. → Try stream payment
+  … 7 s
+ok   channels (after sessions)
+ok   channels fund J7Lq7EkpX2v1Bgdm5qioNhdmVznjM7q8Wa1FeQFUMJtB
+  … 7 s
+ok   settle list
+ok   settle run
+  … 7 s
+ok   settle withdraw
+  … 7 s
+ok   plans subscribe (first listed plan)
+  … 7 s
+ok   plans subscriptions
+ok   connect on the subscription
+ok   plan session: egress = node
+  … 7 s
+ok   disconnect plan session
+  … 7 s
+ok   plans close the subscription
+  … 7 s
+ok   test run (wireguard + v2ray)
+  … 7 s
+ok   test history
+ok   test show --compare
+ok   test export
+ok   test stop (nothing running)
+ok   nodes recent (after sessions)
+ok   history list
+ok   history summary
+ok   sessions
+ok   tickets
+ok   final: no leftovers, direct egress
+
+spend: passed 27  failed 14  (details /home/ubuntu/sweep/spend.log)

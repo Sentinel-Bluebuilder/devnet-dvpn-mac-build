@@ -1,0 +1,4 @@
+System proxy set to 127.0.0.1:1080.
+on-exit=0
+SOCKS proxy: 127.0.0.1:1080 (point an app at it to send only that app through the VPN)
+System proxy: set by this app

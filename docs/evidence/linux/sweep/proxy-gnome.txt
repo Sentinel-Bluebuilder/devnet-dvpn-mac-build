@@ -1,0 +1,10 @@
+Error: The current session has no SOCKS endpoint (only V2Ray/Xray sessions do). Nothing was changed.
+exit=0
+'none'
+''
+0
+SOCKS proxy: none (only a V2Ray or Xray session has one)
+System proxy: not set by this app
+System proxy restored.
+exit=0
+'none'

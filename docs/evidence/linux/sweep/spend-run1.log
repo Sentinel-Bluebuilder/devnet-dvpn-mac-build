@@ -1,0 +1,299 @@
+
+### direct egress before sessions = 34.123.93.65
+$ bash -c [ -n '34.123.93.65' ] && [ '34.123.93.65' != '35.232.17.117' ]
+
+(exit 0)
+
+### connect wireguard per GB
+$ devnet-dvpn connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --units 1 --yes
+Connected. Session 0a87d017-5cc1-4519-9977-966e662f8b7b  wireguard
+(exit 0)
+
+### status while on wireguard
+$ devnet-dvpn status
+Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.19856244 SOL  2999.999 tDVPN  refundable 0
+Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.999 tDVPN  0.04658124 SOL
+Daemon   running dfe36c7-dirty
+Session  Protected  node 8sV25K…Tdib  wireguard  down 0 B  up 0 B  spent 0 tDVPN
+(exit 0)
+
+### wireguard: egress IP = node (35.232.17.117)
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### wireguard: quality ip shows the node
+$ devnet-dvpn quality ip
+35.232.17.117 (api.ipify.org)
+(exit 0)
+
+### disconnect wireguard
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### wireguard: no leftovers, egress back to direct
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=$(pgrep -fc '/usr/local/lib/devnet-dvpn/(v2ray|xray|hysteria2)|openvpn --config /var/lib/dvpnd' || true);
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; no_leftovers && [ "$(egress)" = '34.123.93.65' ]
+nft=0 links=0 procs=2 egress=34.123.93.65
+(exit 1)
+
+### connect amneziawg per GB
+$ devnet-dvpn connect DrTdBLR3rX3epsqw1gj7JG32s1uskxSfYCdurnKGbcqi --units 1 --yes
+Connected. Session c846dab5-ac74-4223-8512-f408569d0e47  amneziawg
+(exit 0)
+
+### status while on amneziawg
+$ devnet-dvpn status
+Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.19856244 SOL  2999.998 tDVPN  refundable 0
+Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.998 tDVPN  0.04440708 SOL
+Daemon   running dfe36c7-dirty
+Session  Protected  node DrTdBL…bcqi  amneziawg  down 0 B  up 0 B  spent 0 tDVPN
+(exit 0)
+
+### amneziawg: egress IP = node (35.232.17.117)
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### amneziawg: quality ip shows the node
+$ devnet-dvpn quality ip
+35.232.17.117 (api.ipify.org)
+(exit 0)
+
+### disconnect amneziawg
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### amneziawg: no leftovers, egress back to direct
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=$(pgrep -fc '/usr/local/lib/devnet-dvpn/(v2ray|xray|hysteria2)|openvpn --config /var/lib/dvpnd' || true);
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; no_leftovers && [ "$(egress)" = '34.123.93.65' ]
+nft=0 links=0 procs=2 egress=34.123.93.65
+(exit 1)
+
+### connect openvpn per GB
+$ devnet-dvpn connect CZRGDkJc7JUotfRSDrRfLjhtSFuunSMgky5Uk3GH8fXQ --units 1 --yes
+Connected. Session 86872cf9-7551-412e-bfcf-727741ceba22  openvpn
+(exit 0)
+
+### status while on openvpn
+$ devnet-dvpn status
+Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.19856244 SOL  2999.997 tDVPN  refundable 0
+Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.997 tDVPN  0.04223292 SOL
+Daemon   running dfe36c7-dirty
+Session  Protected  node CZRGDk…8fXQ  openvpn  down 0 B  up 48 B  spent 0.001 tDVPN
+(exit 0)
+
+### openvpn: egress IP = node (35.232.17.117)
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### openvpn: quality ip shows the node
+$ devnet-dvpn quality ip
+35.232.17.117 (api.ipify.org)
+(exit 0)
+
+### disconnect openvpn
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### openvpn: no leftovers, egress back to direct
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=$(pgrep -fc '/usr/local/lib/devnet-dvpn/(v2ray|xray|hysteria2)|openvpn --config /var/lib/dvpnd' || true);
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; no_leftovers && [ "$(egress)" = '34.123.93.65' ]
+nft=0 links=0 procs=2 egress=34.123.93.65
+(exit 1)
+
+### connect hysteria2 per GB
+$ devnet-dvpn connect 8rwN8HCeqM8WiaemKbckxCAjvGErh1LW8v1zPCBcXJbF --units 1 --yes
+Connected. Session 19fdedaa-b116-4bb6-8031-1c27bf370855  hysteria2
+(exit 0)
+
+### status while on hysteria2
+$ devnet-dvpn status
+Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.19856244 SOL  2999.996 tDVPN  refundable 0
+Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.996 tDVPN  0.04005876 SOL
+Daemon   running dfe36c7-dirty
+Session  Protected  node 8rwN8H…XJbF  hysteria2  down 84 B  up 48 B  spent 0.001 tDVPN
+(exit 0)
+
+### hysteria2: egress IP = node (35.232.17.117)
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 0)
+
+### hysteria2: quality ip shows the node
+$ devnet-dvpn quality ip
+35.232.17.117 (api.ipify.org)
+(exit 0)
+
+### disconnect hysteria2
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### hysteria2: no leftovers, egress back to direct
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=$(pgrep -fc '/usr/local/lib/devnet-dvpn/(v2ray|xray|hysteria2)|openvpn --config /var/lib/dvpnd' || true);
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; no_leftovers && [ "$(egress)" = '34.123.93.65' ]
+nft=0 links=0 procs=2 egress=34.123.93.65
+(exit 1)
+
+### connect xray per GB
+$ devnet-dvpn connect FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi --units 1 --yes
+Connected. Session eb15c323-c315-4a32-bb85-abf9d5ce6c46  xray  SOCKS 127.0.0.1:1080
+(exit 0)
+
+### status while on xray
+$ devnet-dvpn status
+Wallet   HyiPh2idLfN1n6Khqx38ECoNiSnD4v5Wi4hNtXy1Ue5i  0.19856244 SOL  2999.995 tDVPN  refundable 0
+Device   8HfzUKNUnzt9zNpfnh1A3FZRDpZbKzaDCPaESAh4DPVh  allowance 1999.995 tDVPN  0.0378846 SOL
+Daemon   running dfe36c7-dirty
+Session  Protected  node FFmjhX…jcgi  xray  down 0 B  up 0 B  spent 0.001 tDVPN
+(exit 0)
+
+### xray: egress IP = node (35.232.17.117)
+$ bash -c for i in 1 2 3; do [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ] && exit 0; sleep 3; done; exit 1
+
+(exit 1)
+
+### xray: quality ip shows the node
+$ devnet-dvpn quality ip
+34.123.93.65 (api.ipify.org)
+VPN IP via SOCKS 127.0.0.1:1080: 35.232.17.117 (api.ipify.org)
+(exit 0)
+
+### disconnect xray
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### xray: no leftovers, egress back to direct
+$ bash -c no_leftovers () 
+{ 
+    local t l p;
+    t=$(sudo nft list tables 2> /dev/null | grep -c 'inet dvpnd');
+    l=$(ip -o link | grep -cE ' (dvpn-[a-z0-9-]+|hy2-client|tun[0-9]+)[:@]');
+    p=$(pgrep -fc '/usr/local/lib/devnet-dvpn/(v2ray|xray|hysteria2)|openvpn --config /var/lib/dvpnd' || true);
+    echo "nft=$t links=$l procs=$p egress=$(egress)";
+    [ "$t" = 0 ] && [ "$l" = 0 ] && [ "${p:-0}" = 0 ]
+}
+egress () 
+{ 
+    curl -s -m 12 https://api.ipify.org
+}; no_leftovers && [ "$(egress)" = '34.123.93.65' ]
+nft=0 links=0 procs=2 egress=34.123.93.65
+(exit 1)
+
+### connect v2ray per GB
+$ devnet-dvpn connect DfJukf4RgJ6a1AYcf6qGmNpTvvitsMwCWNKgV6cFQ1K3 --units 1 --yes
+Connected. Session d46237f8-eccb-4928-b6e5-e01b076d7f41  v2ray  SOCKS 127.0.0.1:1080
+(exit 0)
+
+### proxy status shows the SOCKS endpoint
+$ devnet-dvpn proxy status
+SOCKS proxy: 127.0.0.1:1080 (point an app at it to send only that app through the VPN)
+System proxy: not set by this app
+(exit 0)
+
+### v2ray: SOCKS 127.0.0.1:1080 egress = node
+$ bash -c [ "$(curl -s -m 15 --socks5-hostname 127.0.0.1:1080 https://api.ipify.org)" = '35.232.17.117' ]
+
+(exit 0)
+
+### proxy on → GNOME mode manual + socks 127.0.0.1; proxy off → none
+$ bash -c grep -q "'manual'" '/home/ubuntu/sweep/proxy-gnome.txt' && grep -q "'127.0.0.1'" '/home/ubuntu/sweep/proxy-gnome.txt' && tail -1 '/home/ubuntu/sweep/proxy-gnome.txt' | grep -q "'none'"
+
+(exit 0)
+
+### proxy browser (Chrome, own profile, through SOCKS)
+$ devnet-dvpn proxy browser --browser chrome --url https://api.ipify.org
+Opened Google Chrome through SOCKS 127.0.0.1:1080 in its own profile. Your other browser windows do not use the VPN.
+(exit 0)
+
+### browser window runs with --proxy-server=socks5
+$ bash -c pgrep -af 'chrome.*--proxy-server=socks5://127.0.0.1' | head -1 | grep -q proxy-server
+
+(exit 0)
+
+### connect --switch v2ray → wireguard
+$ devnet-dvpn connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --units 1 --switch --yes
+Connected. Session a3e4b29e-759c-49a3-81f2-eebca1103632  wireguard
+(exit 0)
+
+### after switch: egress = node
+$ bash -c [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ]
+
+(exit 0)
+
+### disconnect after switch
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### connect wireguard per hour
+$ devnet-dvpn connect 8sV25KKBRbYD9kEXVAYX2wmVwEzaSsBtfA8G8LvfTdib --basis per_hour --units 1 --yes
+Connected. Session 7cdc3b18-0e9b-40d7-9fa1-9e7935491fd5  wireguard
+(exit 0)
+
+### per hour: egress = node
+$ bash -c [ "$(curl -s -m 12 https://api.ipify.org)" = '35.232.17.117' ]
+
+(exit 0)
+
+### disconnect per hour
+$ devnet-dvpn disconnect
+Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.
+(exit 0)
+
+### connect --follow (ends on disconnect)
+$ devnet-dvpn connect FFmjhX3aTAUx1Ff2FnHUT5r1Xrq5qfvShvkbxPLwjcgi --units 1 --yes --follow
+Connected. Session 394898db-3a14-4a82-9ec2-724fe0b75c6b  xray  SOCKS 127.0.0.1:1080
+Protected  down 0 B  up 0 B  spent 0.001 tDVPN
+Disconnected.
+(exit 0)
