@@ -29,6 +29,8 @@ row_doctor_rows() {
   local svc clk fails
   svc=$(doctor_level service); clk=$(doctor_level clock)
   fails=$(awk -F'\t' '$1=="fail"{print $2}' "$EV/doctor_rows.tsv" | tr '\n' ' ')
+  # Evidence only (W31 P1, rc.10): modes + ACLs of the service home and the log, no verdict. Names and modes only.
+  { sudo ls -le "/Library/Application Support/sentinel-dvpn/c0"; sudo ls -le /Library/Logs/DevnetDVPN; } >"$EV/home_perms.out" 2>&1
   if [ "$svc" = ok ] && [ "$clk" = ok ] && [ -z "$fails" ]; then record doctor_rows PASS "$(wc -l <"$EV/doctor_rows.tsv" | tr -d ' ') rows, service ok, clock ok, no fail"
   else record doctor_rows DIFFERS "service='$svc' clock='$clk' fail rows: ${fails:-none}"; fi
 }
@@ -135,6 +137,58 @@ row_pf_restore() {
   else record pf_restore DIFFERS "up1=$up1 attach_after='$att_after' anchor_after='$(echo "$anc_after" | head -1)' net=${net:-} up2=${up2:-none} attach_end='$att_end' (see pf_restore.out)"; fi
 }
 
+# ─── E-ST owner (#38 rc.9): owner A's service, a fresh data dir + wallet B, the same device key ───
+# Claim: agent up as wallet B in a NEW data dir adopts the installed device key (no new key), the install step sets
+# the service owner to B, and B connects; back in A's data dir, daemon install sets it to A again and A connects.
+# Before b1750da48 the service kept owner = A and B never connected. Spend: A sends B SWITCH_SOL + SWITCH_TDVPN; B
+# opens one deposit; at the end B sends its tDVPN and spare SOL back to A. B's key never leaves the runner and is
+# deleted at the end; only its ADDRESS is kept in switch.out (its closing deposit's refund is lost with it).
+SWITCH_SOL=${SWITCH_SOL:-0.04}; SWITCH_TDVPN=${SWITCH_TDVPN:-2}
+runb() { # runb <row> <cli args…>: like run, as wallet B in its own data dir
+  local row=$1; shift
+  OUT=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" "$@" --json 2>"$EV/$row.err"); RC=$?
+  { echo "\$ [wallet B] $CLI $* --json   (exit $RC)"; echo "$OUT"; echo '--- stderr ---'; cat "$EV/$row.err"; } >"$EV/$row.out"
+  rm -f "$EV/$row.err"
+}
+row_wallet_switch() {
+  local a b dev0 devb mp upb downb upa back tdv sol keep rc_final
+  [ "$(get up_rc)" = 0 ] || { RC=1; record wallet_switch DIFFERS "skipped: the plain agent up failed"; return; }
+  a=$("$CLI" agent status --json 2>/dev/null | jq -r '.address // empty')
+  dev0=$("$CLI" agent status --json 2>/dev/null | jq -r '.device // empty')
+  SW_DATA="$HOME/ddv-data-b"; SW_KEY="$HOME/ddv-key-b/b.json"
+  rm -rf "$SW_DATA" "$HOME/ddv-key-b"; mkdir -p "$SW_DATA"; (umask 077; mkdir -p "$HOME/ddv-key-b")
+  runb sw_create wallet create --keyfile "$SW_KEY" --yes
+  b=$(echo "$OUT" | jq -r '[.. | objects | .address? // empty] | .[0] // empty' 2>/dev/null)
+  if [ -z "$b" ] || [ ! -f "$SW_KEY" ]; then RC=1; record wallet_switch DIFFERS "wallet B could not be created (see sw_create.out)"; rm -rf "$SW_DATA" "$HOME/ddv-key-b"; return; fi
+  chmod 600 "$SW_KEY"
+  gap; run sw_fund_sol wallet send --to "$b" --sol "$SWITCH_SOL" --yes
+  gap; run sw_fund_tdvpn wallet send --to "$b" --tdvpn "$SWITCH_TDVPN" --yes
+  mp=$(get max_price)
+  gap
+  if [ -n "$mp" ]; then runb sw_up_b agent up --max-price "$mp" --yes; else runb sw_up_b agent up --yes; fi; upb=$RC
+  devb=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" agent status --json 2>/dev/null | jq -r '.device // empty')
+  gap; runb sw_down_b agent down --yes; downb=$RC
+  # back to A: its data dir still records the device for A; the install step sets the service owner to A again
+  run sw_install_a daemon install --yes; back=$RC
+  wait_service 90 >/dev/null
+  gap
+  if [ -n "$mp" ]; then run sw_up_a agent up --max-price "$mp" --yes; else run sw_up_a agent up --yes; fi; upa=$RC
+  gap; run sw_down_a agent down --yes
+  # B's funds back to A: all its tDVPN, and its SOL less 0.003 for the two fees
+  tdv=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" agent status --json 2>/dev/null | jq -r '.tdvpn // "0"')
+  if [ -n "$tdv" ] && [ "$tdv" != 0 ]; then gap; runb sw_back_tdvpn wallet send --to "$a" --tdvpn "$tdv" --yes; fi
+  sol=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" agent status --json 2>/dev/null | jq -r '.sol // "0"')
+  keep=$(echo "$sol" | awk '{ v = $1 - 0.003; if (v > 0) printf "%.6f", v; else print "" }')
+  if [ -n "$keep" ]; then gap; runb sw_back_sol wallet send --to "$a" --sol "$keep" --yes; fi
+  { echo "owner A=$a wallet B=$b"; echo "device before=$dev0 device as B=$devb"; echo "up_b=$upb down_b=$downb install_a=$back up_a=$upa";
+    echo "B left: tdvpn sent back=${tdv:-0} sol sent back=${keep:-0}"; } >"$EV/switch.out"
+  rm -P "$SW_KEY" 2>/dev/null; rm -rf "$SW_DATA" "$HOME/ddv-key-b"
+  rc_final=$upb; RC=$rc_final
+  if [ "$upb" = 0 ] && [ -n "$dev0" ] && [ "$devb" = "$dev0" ] && [ "$back" = 0 ] && [ "$upa" = 0 ]; then
+    record wallet_switch PASS "fresh data dir + wallet $b on owner $a's service: same device $dev0 adopted, B connected; daemon install back to A, A connected"
+  else record wallet_switch DIFFERS "up_b=$upb device_b='$devb' (was '$dev0') install_a=$back up_a=$upa (see switch.out, sw_up_b.out)"; fi
+}
+
 # ─── GUI smoke: the app opens, a window with its title, a screenshot ───
 row_gui_smoke() {
   open "$APP" >"$EV/gui_open.out" 2>&1; RC=$?
@@ -152,4 +206,4 @@ row_gui_smoke() {
   else record gui_smoke DIFFERS "open rc=$RC alive=$alive windows='$title' png=$png bytes (see gui_open.out)"; fi
 }
 
-ROWS="$ROWS doctor_rows launchd_print launchd_stopped clock_skew pf_restore gui_smoke"
+ROWS="$ROWS doctor_rows launchd_print launchd_stopped clock_skew pf_restore wallet_switch gui_smoke"

@@ -2,9 +2,14 @@
 
 Every CLI command, feature, screen and protocol, with the Windows and Linux proof next to the Mac
 proof. Mac evidence lives in `docs/evidence/mac/` (raw logs; a cell's evidence names the file).
-Rig: macOS Sonoma 14 x86_64 guest (OSX-KVM) on GCP host `ddv-mac-host-1`, against #31's six nodes
-on `ddv-node-1` (both in the retired project `ddv-node-test-5821`; today's host is `ddv-mac-host-dv`, see `CLAUDE.md`). dvpnd = cf4c372-ddv15.2-mac<N> (#31/#32 parity tree + #33 macOS patches 0007–0026 in
-`docs/patches/`; pin in `build/deps.lock.json`), darwin build (`scripts/e2e/mac/build-dvpnd.sh`, on the GCP host).
+Rigs: **Apple silicon** = GitHub-hosted `macos-15` arm64 (`.github/workflows/macos-rc8.yml`: build, unit + platform
+tests, `.dmg` install, live rows `scripts/e2e/mac/gha-live.sh`; `verify-release.yml` checks the published assets).
+**Intel** = macOS Sonoma 14 x86_64 guest (OSX-KVM) on GCP host `ddv-mac-host-1`, against #31's six nodes on `ddv-node-1`
+(both in the retired project `ddv-node-test-5821`; today's host is `ddv-mac-host-dv`, see `CLAUDE.md`); the matrix and
+kill-switch rows below are Intel-guest proof. dvpnd = `fork-cb33-4-final6.16` (pin in `build/deps.lock.json`; the
+v0.3.0-rc8 package ships the bytes the rc.4 package shipped from that build, sha `cfc37810…`, under a CI-only lock
+override recorded in the run summary). Its macOS patches are part of the private upstream fork and are not in the
+public copy of this repo.
 Three rigs (`ddv-mac`, `ddv-mac-2`, `ddv-mac-3`) run `scripts/e2e/mac/matrix.sh`; every run's per-case results are
 pulled to `docs/evidence/mac/<run>/` and summed by `matrix-json.mjs` (case × protocol, four oracles per cell).
 
@@ -23,31 +28,33 @@ proof exists. Current state, with the evidence:
 | Fresh install (dmg, no clicks) → first run → connect → disconnect → settle → uninstall | ✅ 0.3.0-rc.1 | `docs/evidence/mac/rc1/t1-06-fresh.txt`, `t1-07-journey.txt` |
 | Update 0.1.3 → 0.3.0-rc.2, connect + settle on rc.2 | ✅ | `docs/evidence/mac/rc2/upgrade-013-*.txt` |
 | Per GB / per hour, six protocols | ✅ (dvpnd ddv18.34-mac) | `docs/evidence/mac/final-r2/pay-gb.tsv`, `pay-hour.tsv` |
-| Plans: subscribe → connect on the subscription, six protocols | ✅ (10-28/29) | `~/memory/cells/results/M-plan-a3a4{,-ovh,-vx}.pass` (the `matrix/plan-a3a4.tsv` file is an older VOID run) |
+| Plans: subscribe → connect on the subscription, six protocols | ✅ (10-28/29) | the run's pass files are kept outside this repo (not public); the `matrix/plan-a3a4.tsv` file here is an older VOID run |
 | Kill switch on / persist (incl. reboot on rc.2) | ✅ | `final-r1/ks-on.tsv`, `ks-persist.tsv`; `rc2/reboot-B-1cbe290/` |
 | Split by address (include + exclude), six protocols | ✅ 0 FAIL | `matrix-r11-rig3/split-route.tsv` |
 | Split by app; SOCKS-only V2Ray/Xray; system proxy | ✅ | `rc1/ksm/ksm10-cli-*`; `matrix-r10-rig2/coverage.tsv` |
 | Whole device (incl. V2Ray/Xray utun) | ✅ 55 PASS / 0 FAIL | `final-r2/whole.tsv` |
 | DNS (kill switch off) | ✅ 61 PASS / 0 FAIL | `matrix-r10-rig2/dns.tsv` |
-| Allow LAN | ✅ (10-27, ddv-mac-n1) | `~/memory/cells/results/M-lan.pass`. The `lan.tsv` FAILs in `matrix-r8-rig2` / `matrix-r10-rig2` ("LAN on: internet still only through the node", egress 136.108.156.183 = the host) are from the old host rig, not the app |
+| Allow LAN | ✅ (10-27, ddv-mac-n1) | the run's pass file is kept outside this repo (not public). The `lan.tsv` FAILs in `matrix-r8-rig2` / `matrix-r10-rig2` ("LAN on: internet still only through the node", egress 136.108.156.183 = the host) are from the old host rig, not the app |
 | Settle / withdraw / history | ✅ | `matrix-r10-rig2/money.tsv` |
 | Root steps: `sudo -n` (no prompt) and osascript dialog | ✅ | `rc1/t1-07-journey.txt:24-26`; `rc2/upgrade-013-after.txt:21`, `prompt-proof/` |
-| Apple silicon (arm64) | ⏸ built + signed, never run | `rc2/MANIFEST.txt` |
+| Apple silicon (arm64), v0.3.0-rc8: `.dmg` install, device setup (`--allowance 50`), service install, doctor 19 rows / 0 fail, V2Ray connect (exit IP ≠ home), status, disconnect, launchd stop → `next` restarts it, kill switch with the service killed fails closed, GUI window | ✅ (GitHub `macos-15`) | [run 44808199308](https://github.com/Sentinel-Bluebuilder/devnet-dvpn-mac-build/actions/runs/44808199308) (the published build), [run 44813895933](https://github.com/Sentinel-Bluebuilder/devnet-dvpn-mac-build/actions/runs/44813895933) (21 PASS / 3 DIFFERS: plain `device setup` W91, `send_sol_no_fees` row margin, `pf_restore`) |
+| Published v0.3.0-rc8 assets on a clean Mac: sums, install, version + devnet ids, ad hoc signature | ✅ | [verify-release 44813935780](https://github.com/Sentinel-Bluebuilder/devnet-dvpn-mac-build/actions/runs/44813935780) |
+| Every Mach-O in the arm64 app is arm64 | ✗ v0.3.0-rc8: 3 universal `node_gyp_bins/python3` + 2 `darwin-x64` prebuilds (never loaded); fixed for rc9 (`build/mac/adhoc-sign.cjs` `pruneForeign`, whole-app `checkArch`) | same verify-release run, step 5 |
 
-Per-step agent-flow table: `Desktop/sentinel-agent-connect-solana/docs/PROOF-MACOS.md`.
+Per-step agent-flow table: the hub's `docs/PROOF-MACOS.md` ([agentic-privacy-solana-devnet](https://github.com/Sentinel-Bluebuilder/agentic-privacy-solana-devnet/blob/main/docs/PROOF-MACOS.md)).
 
 ## Headline
 
 | | Windows (#31) | Linux (#32) | macOS (#33) |
 |---|---|---|---|
 | CLI commands (catalogue: #31's 71 + Mac `daemon uninstall`) | e2e + VM sweep | ✅ every command live (`cover`: 0 missing) | ☐ |
-| Unit tests | Windows suite | ✅ 320/320 on the VM | 🧪 laptop (Windows) green; ☐ guest run |
+| Unit tests | Windows suite | ✅ 320/320 on the VM | ✅ `tests/unit` + `tests/platform` (darwin) on GitHub `macos-15`: 321/321 files ([run 44808199308](https://github.com/Sentinel-Bluebuilder/devnet-dvpn-mac-build/actions/runs/44808199308)) |
 | Protocols per GB | see LINUX-PARITY | ✅ all six | ☐ |
 | Kill switch ON, all six | see LINUX-PARITY | ✅ path lost: no leak · ✗ gap #41 | ☐ |
 | System proxy + browser window | ✅ WinINET | ✅ GNOME + KDE | ☐ networksetup |
 | UI, every screen, dark + light | ✅ | ✅ | ☐ |
-| Installer / clean install / upgrade / uninstall | ✅ | ✅ 22/22 | ☐ dmg + first-run setup |
-| Apple silicon (arm64) | — | — | ⏸ built, not run (rig is Intel-only) |
+| Installer / clean install / upgrade / uninstall | ✅ | ✅ 22/22 | ◐ arm64: `.dmg` install + device setup + service install ✅ (run 44813895933); upgrade / uninstall: Intel guest only |
+| Apple silicon (arm64) | — | — | ✅ live on GitHub `macos-15` (see "Current proof") |
 
 ## S12-lite live proof (FMC, 2026-11-08) — fork-cb33-2 x64 dmg
 
@@ -59,23 +66,18 @@ socket `root:sentinel-dvpn` + money ✅; 5/6 protocols (wg/v2ray/xray/openvpn/hy
 readable ✅; S2 kill switch fail-closed (abnormal tunnel kill → egress blocked) ✅; S10 uninstall clean
 (no service/plist/socket/lib/anchors; device key kept) ✅. The full matrix below is TMC's sweep on the RC.
 
-## Release candidates
+## Releases
 
-### Interim RC — fork-cb33-2 daemon ddv20, built from main `1b7f2cf3` (2026-11-08, gated typecheck + tests green)
+Published macOS releases are in [`sentinel-solana-dvpn-macos`](https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-macos/releases).
+**v0.3.0-rc8** (Latest, 2026-11-20): arm64 only, ad hoc signed, not notarized, built by
+[run 44808199308](https://github.com/Sentinel-Bluebuilder/devnet-dvpn-mac-build/actions/runs/44808199308).
 
-For TMC's S3–S9 on the Intel guest. Daemon = fork-cb33-2-ddv20 (AmneziaWG runtime works via
-install-deps.sh; doctor still cosmetically warns `service_platform_amneziawg` unsupported — that
-clears only on the fork-cb33-4 daemon carrying FWX's SDK fix d3746b4). Tools from Homebrew at setup
-(not yet bundled). To be superseded by the fork-cb33-4 RC (doctor-clean AWG + all tools bundled).
+| artifact | sha256 |
+|---|---|
+| Devnet-dVPN-0.3.0-rc.8-arm64.dmg | `a4295f29a1849d9b2125b783a7eeb303c4e97448113e7e9811d82f44f3c28505` |
+| Devnet-dVPN-0.3.0-rc.8-arm64-mac.zip | `b7bda429810c94116e9004b7c5cc461b26f6be06c8875f55ff029d76b5afd1b9` |
 
-| artifact | sha256 | status |
-|---|---|---|
-| Devnet-dVPN-0.1.3-x64.dmg | `26471f38f1112232e36e6c8936965f6c2080d9ac84582268eee8d5784929eaad` | live-provable (Intel guest) |
-| Devnet-dVPN-0.1.3-x64-mac.zip | `4d62b50d062d18b952ec763c70e6ec5bb2c6868a88ff5b056bb891354e494533` | live-provable (Intel guest) |
-| Devnet-dVPN-0.1.3-arm64.dmg | `ec51ab19c6b722973abe6acd8e61c7c83857d5db6f893eadc2cb949cd2ba5b58` | built only (rig is Intel) |
-| Devnet-dVPN-0.1.3-arm64-mac.zip | `6e973850e9ee37915eb59b30ba72bfe1ba80354acd3b272a3501ff57a8474e4c` | built only (rig is Intel) |
-
-### Final RC — fork-cb33-4 + all tools bundled + OSS fixes — _pending FWX fork-cb33-4 (~1–2 h)_
+Intel Macs: the older x64 releases (guest-built) on the same releases page.
 
 ## Matrix — function × protocol (#31's request)
 
@@ -94,12 +96,12 @@ Each cell names the sweep check that proves it (`~/sweep/<tier>.tsv` in the gues
 | settle + withdraw | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | spend: `settle run`, `settle withdraw` |
 | plans: subscribe → connect on subscription → close | ⏸ | ⏸ | ⏸ | ⏸ | ⏸ | ⏸ | spend with `PLAN_ADDR` (needs a plan #31 allows; not 6zKPsC/8CRB4PKg) |
 | kill switch OFF: DNS = VPN DNS on every service | ☐ | ☐ | ☐ | ☐ | — | — | ledger: `dns-off <p>: VPN DNS 1.1.1.1 on every service` |
-| kill switch ON: pf anchor loaded, names resolve | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ksdns: `pf anchor dvpnd is loaded`, `names resolve` |
+| kill switch ON: pf anchor loaded, names resolve | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ksdns: `pf anchor sentinel-dvpn-c0 is loaded`, `names resolve` |
 | kill switch ON: pf passes the utun that exists (#29 shape) | ☐ | ☐ | ☐ | ☐ | — | — | ksdns: `pf passes the utun that exists` |
 | kill switch ON: direct request blocked (SOCKS protocols) | — | — | — | — | ☐ | ☐ | ksdns: `a direct (non-proxied) request is blocked` |
 | kill switch ON: path to server lost → no leak | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ksdns: `path to the server lost` (test pf anchor before dvpnd's) |
 | kill switch ON: tunnel died (utun down / process killed) → no leak, also 25 s later | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ksdns: `tunnel broken`, `25 s later` (gap #41 fixed in ddv6) |
-| kill switch ON: dvpnd itself dies → no leak | ☐ | — | — | ☐ | — | — | ledger: `kill-on <p>: dvpnd SIGKILLed` (launchd restarts it; same two protocols as #32) |
+| kill switch ON: dvpnd itself dies → no leak | ☐ | — | — | ☐ | ✅ arm64 (GitHub macos-15 run 44813895933 pf_restore: block held) | — | ledger: `kill-on <p>: dvpnd SIGKILLed` (launchd restarts it; same two protocols as #32) |
 | kill switch persist: service restart + dvpnd SIGKILL never leak | ☐ | — | ☐ | — | — | — | ledger: `persist <p>: …` (same two protocols as #32) |
 | restore network: pf / DNS / proxy exactly as before | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ksdns: `after restore`, `final: pf main ruleset as before` |
 | DNS leak, kill switch off: no lookup on the physical interface | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ledger: `dns-off <p>: no lookup leaves on <if>` (tcpdump; V2/Xr: SOCKS-resolved names), positive control first |
@@ -118,18 +120,18 @@ Each cell names the sweep check that proves it (`~/sweep/<tier>.tsv` in the gues
 
 | piece | proof |
 |---|---|
-| LaunchDaemon: KeepAlive restarts a crashed dvpnd | ☐ installer: `launchd restarts the service after a crash` |
-| socket `root:dvpn 0660` + inherited user ACL | ☐ daemon: `socket root:dvpn 0660 with an ACL` |
-| key folder root-only; `device.pub` readable | ☐ daemon: `device key folder is root-only` |
+| LaunchDaemon: KeepAlive restarts a crashed dvpnd | ✅ arm64 (GitHub macos-15 run 44813895933: kill -9, service back, connect ok); installer: `launchd restarts the service after a crash` |
+| socket `root:sentinel-dvpn 0660` + inherited user ACL | ☐ daemon: `socket root:sentinel-dvpn 0660 with an ACL` |
+| key folder root-only; `device.pub` readable | ✅ root-only on arm64 (GitHub macos-15 run 44813895933: doctor as the user, keys/ permission denied); daemon: `device key folder is root-only` |
 | service PATH = root-owned copies only | ☐ daemon: `service runs root-owned copies only` |
-| root steps: `sudo -n` (rig) | ☐ daemon tier settings round trips |
+| root steps: `sudo -n` (rig) | ✅ arm64 (GitHub macos-15 run 44813895933: daemon install --yes with passwordless sudo); daemon tier settings round trips |
 | root steps: osascript admin prompt (GUI) | ☐ one prompt answered through QMP keystrokes (installer, GUI) |
 | CLI wallet in the login Keychain; locked Keychain → action | ☐ local: `wallet secret is in the Keychain`, `Keychain locked says what to do` |
 | app wallet: safeStorage (Keychain) | ☐ ui-smoke with a created wallet |
 | drivers: Homebrew as the user + AmneziaWG from pinned source | ☐ daemon: `daemon repair-drivers`, `daemon drivers` all ready |
 | login item (LaunchAgent) on/off | ☐ ui-smoke Settings toggle + `launchctl print gui/<uid>/…` |
 | Terminal `.command` for the CLI screen | ☐ ui-smoke "Open in Terminal" |
-| `.dmg` ad-hoc signature verifies | ☐ installer: `dmg: verifies and holds a signed app` |
+| `.dmg` ad-hoc signature verifies | ✅ v0.3.0-rc8 (verify-release 44813935780: Signature=adhoc, deep verify OK); installer: `dmg: verifies and holds a signed app` |
 
 ## Every CLI command
 

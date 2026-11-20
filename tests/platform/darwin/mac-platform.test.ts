@@ -451,7 +451,7 @@ describe('setup after a wallet switch (fleet bug W1)', () => {
     expect(s).toMatch(/svc_stop \|\| die/);
     expect(s).toContain('mv "$HOME_DIR" "$prev"');
     expect(s).toContain('.prev-$(date -u');
-    expect(s.indexOf('mv "$HOME_DIR" "$prev"')).toBeLessThan(s.indexOf('cp -Rp "$STAGING/." "$HOME_DIR/"'));
+    expect(s.indexOf('mv "$HOME_DIR" "$prev"')).toBeLessThan(s.indexOf('cp -Rp "$STAGING/."'));
     expect(s).not.toMatch(/rm -rf "\$HOME_DIR"|rm -rf "\$prev"/);
   });
 });

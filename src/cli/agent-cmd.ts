@@ -11,7 +11,7 @@ import { within, internetProbe, STATUS_NET_BUDGET_MS, reconnectBlockedNext, RECO
 import { cliActionHint, isLimitShort } from './action-hint';
 import { snapshot } from '../main/app-state';
 import { runJobNow } from '../main/scheduler';
-import { refreshWallet } from '../main/services/wallet';
+import { deviceSetup, refreshWallet } from '../main/services/wallet';
 import { refreshNodes, nodeViews } from '../main/services/nodes';
 import { connect, adoptRunningSession, sessionStateUnknown } from '../main/services/connection';
 import { readSettlements, runSettlement } from '../main/services/settlement';
@@ -21,7 +21,7 @@ import { launchdState, LAUNCHD_LABEL, LAUNCHD_PLIST } from '../main/daemon/launc
 import { launchdStartNext } from '../core/daemon/darwin-launchd';
 import { rivalVpns } from '../main/system/tunnels';
 import { getSettings } from '../main/system/settings';
-import { serviceUsesTun } from '../main/daemon/settings';
+import { serviceUsesTun, getDaemonSettings } from '../main/daemon/settings';
 import { loadHomeIp } from '../main/home-ip';
 import { writeAgentMarker } from '../main/services/agent-marker';
 import { ownerAddress, noWallet } from '../main/wallet/vault';
@@ -41,7 +41,8 @@ import { isAndroid } from '../shared/is-android';
 import type { LiveSession, NodeView, PendingSettlement } from '../shared/types';
 import { PREFLIGHT_CODES } from '../core/session/state';
 import { deviceLimitFor, DEPOSITS_PER_RAISE } from '../core/session/device-limit';
-import { keyfileModeProblem } from './keystore';
+import { keyfileModeProblem, keyfileModeNext } from './keystore';
+import { clockBlock, clockCheck } from './clock-gate';
 import { takeUpLock, UP_LOCK_WAIT_MS } from './up-lock';
 import { getHost } from '../main/host';
 import { moneyOf } from './money-note';
@@ -57,12 +58,17 @@ const IP_WAIT_MS = 8000;
 export const AGENT_SOL_MIN = SOL_BEFORE_SETUP;
 
 /** R7: the `defaults` block of an agent up preview and answer: what each default is and where it came from. */
-export function defaultsView(d: Defaults, settingBase: bigint | null, units: number, capFromFlag: boolean): Record<string, unknown> {
+export function defaultsView(d: Defaults, settingBase: bigint | null, units: number, capFromFlag: boolean, liveBase?: string | null): Record<string, unknown> {
   const limitRec = settingBase === null ? null : defaultLimitBase(settingBase, d.market, units);
+  // LIM-3 (#38 rc.9, T-A 25): spendingLimit is the limit the chain enforces (this device's grant.allowance) when it
+  // was read; the Settings amount is configuredDefault (what a first setup uses). With no grant read, as before.
+  const live = typeof liveBase === 'string' && /^\d+$/.test(liveBase) ? liveBase : null;
   return {
     priceCap: capFromFlag ? 'set by --max-price' : d.priceCapBase === null ? null : tdvpn(d.priceCapBase),
     priceCapBase: capFromFlag ? null : d.priceCapBase,
-    spendingLimit: settingBase === null ? null : tdvpn(settingBase.toString()),
+    spendingLimit: live !== null ? tdvpn(live) : settingBase === null ? null : tdvpn(settingBase.toString()),
+    spendingLimitSource: live !== null ? 'grant' : 'settings',
+    configuredDefault: settingBase === null ? null : tdvpn(settingBase.toString()),
     spendingLimitRecommended: limitRec === null ? null : tdvpn(limitRec.toString()),
     units,
     source: d.source,
@@ -71,8 +77,8 @@ export function defaultsView(d: Defaults, settingBase: bigint | null, units: num
   };
 }
 
-function fail(message: string, code: string, next: string): never {
-  throw Object.assign(new Error(message), { code, action: next });
+function fail(message: string, code: string, next: string, alsoNext?: string): never {
+  throw Object.assign(new Error(message), { code, action: next, ...(alsoNext ? { alsoNext } : {}) });
 }
 
 /** S5/E-71 (#38 rc.6): the engine's catch-all "Something went wrong. Retry." never reaches an agent as-is. The
@@ -169,7 +175,8 @@ async function openDepositOn(node: string, code: string | undefined): Promise<Pe
 // the command that turns on network time for this OS (the minutes stay in the error). Every server refuses a wrong
 // clock alike, so no other node or deposit is ever the way out.
 export function CLOCK_NEXT(platform: string = process.platform): string {
-  const fix = platform === 'win32' ? 'w32tm /resync (from an elevated shell)'
+  // WIN-W8 (#38 rc.9): W32Time is trigger-start on a workgroup PC and often stopped; w32tm /resync then fails (0x80070426).
+  const fix = platform === 'win32' ? 'Start-Service w32time; w32tm /resync /force (elevated PowerShell)'
     : platform === 'darwin' ? 'sudo sntp -sS time.apple.com'
     // C-CLOCK2: timedatectl alone does not step a running chrony (AC-LINUX: +10 min stayed); one line for both.
     : 'sudo timedatectl set-ntp true && (sudo chronyc makestep 2>/dev/null || true)';
@@ -202,7 +209,8 @@ export const SWEEP1_NEXT: Record<string, string> = {
   'switch-reconnecting': `${CLI} agent status until "connected" is true, or ${CLI} agent down --yes first`,
   'switch-offline': AGAIN('in a moment'),
   cancelled: AGAIN('(it was stopped before it finished)'),
-  'waiting-for-network': AGAIN('in a minute (this computer has no network yet)'),
+  // L-RPC (#38 rc.8): the service cannot reach Solana (its preflight to the RPC failed): name its RPC (gap 4), as rpc-*.
+  'waiting-for-network': SET_RPC,
   'service-stopped-connecting': `${CLI} quality ip; if it shows no address, ${CLI} daemon restore-network; then ${CLI} agent up --yes`,
   'node-price': NEW_DEPOSIT, credit_exhausted: NEW_DEPOSIT, lease_insufficient: NEW_DEPOSIT, voucher_exceeds_escrow: NEW_DEPOSIT, voucher_signature_invalid: NEW_DEPOSIT,
   'node-error': AGAIN('in a minute'),
@@ -345,12 +353,17 @@ export function pinnedUpLine(a: Args, node: string, inp: { basis: string; units:
 
 /** S7 (#38 rc.6): a spending-limit raise is its own explicit step. `agent up --yes` with the limit below the deposit
  *  pays nothing and names the exact line that raises it (old → new), never raising it on its own. */
-export function limitRefusal(allowanceBase: string, escrowBase: string, settingTdvpn: string, line: string): { message: string; next: string } {
+export function limitRefusal(allowanceBase: string, escrowBase: string, settingTdvpn: string, line: string): { message: string; next: string; alsoNext: string } {
+  // LIM-1 (#38 rc.9, T-A 3 least privilege): the next was the --raise-limit line, which raises the limit to the Settings
+  // amount (often 10x the deposit). It now sets the limit to this deposit, then runs the same pinned line; the wider
+  // raise stays one step away in alsoNext.
   const settingBase = /^\d+(\.\d+)?$/.test(String(settingTdvpn ?? '')) ? BigInt(toBaseUnits(settingTdvpn)) : 0n;
   const want = deviceLimitFor(settingBase, BigInt(escrowBase));
+  const deposit = tdvpn(escrowBase);
   return {
-    message: `Spending limit ${tdvpn(allowanceBase)} tDVPN is below this deposit (${tdvpn(escrowBase)} tDVPN). Nothing was paid. Add --raise-limit to raise it to ${tdvpn(want.toString())} tDVPN.`,
-    next: `${line} --raise-limit --yes`,
+    message: `Spending limit ${tdvpn(allowanceBase)} tDVPN is below this deposit (${deposit} tDVPN). Nothing was paid. next sets the limit to this deposit (${deposit} tDVPN); alsoNext raises it to ${tdvpn(want.toString())} tDVPN with --raise-limit.`,
+    next: `${CLI} device setup --allowance ${deposit} --yes, then ${line} --yes`,
+    alsoNext: `${line} --raise-limit --yes`,
   };
 }
 
@@ -372,10 +385,7 @@ async function exitIp(sid: string): Promise<{ ip: string; directIp?: string | nu
 
 /** R3 gap 1 + M-S (#38 rc.8): the key-file-mode sentence and its one command, shared by `agent up` and `agent status`. */
 const keyfileModeText = (k: { path: string; mode: string }): string => `The key file ${k.path} can be read by other users (mode ${k.mode}).`;
-/** A path as one shell word: unchanged when it is plain, else single-quoted (macOS key files often sit under
- *  "~/Library/Application Support", and an unquoted chmod there runs on two wrong paths). Exported for tests. */
-export const shellWord = (p: string): string => (/^[A-Za-z0-9_./@%+:=-]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`);
-export const keyfileModeNext = (file: string): string => `chmod 600 ${shellWord(file)}, then ${CLI} agent up --yes`;
+export { keyfileModeNext, shellWord } from './keystore'; // K-WIN2: shared with wallet show
 
 // ─── agent up ───
 /** B-UP: one paying `agent up` at a time; a second one waits for the first, then reuses its session. */
@@ -429,6 +439,10 @@ const upOnce: Cmd = async (a, o) => {
     // A different server is asked for: below, through connect()'s switch path (it keeps a kill switch up between
     // the two sessions; disconnect + connect would release it and leak the real IP: AC-SAFETY, docs/agent-safety.md).
   }
+  // WIN-W7 (#38 rc.9): a wrong clock is refused here, before the device gate and any funding ask (edge row 2: a
+  // +10 min clock answered not-funded, so the agent would fund a device first). Unreadable chain time = skipped.
+  const clock = await within(clockBlock(), STATUS_NET_BUDGET_MS, 'the chain clock');
+  if (clock) fail(clock.error, 'clock-skew', CLOCK_NEXT());
   // First-run step `daemon init` (local, unelevated, no spend); connect() itself signs the spending permission.
   if (!daemonInfo().device) {
     const d = await initDevice(owner!);
@@ -513,7 +527,7 @@ const upOnce: Cmd = async (a, o) => {
   const settingText = getSettings().allowanceTdvpn;
   const settingBase = /^\d+(\.\d+)?$/.test(String(settingText ?? '')) ? BigInt(toBaseUnits(settingText)) : null;
   const dflt: Defaults | null = subscription ? null : defaultCap(settingBase, market, inp.units);
-  const defaults = dflt ? defaultsView(dflt, settingBase, inp.units, inp.maxPrice !== undefined) : null;
+  const defaults = dflt ? defaultsView(dflt, settingBase, inp.units, inp.maxPrice !== undefined, wallet?.grant?.allowance ?? null) : null;
   // S7 (#38 rc.6, AC-CODES proposal): with no --max-price and no plan, a deposit above the Settings limit / 10 is
   // refused (nothing paid). That is the largest deposit whose limit raise (deviceLimitFor) stays within the Settings
   // limit, so one number means "capped by default" and "never widened past the owner's setting".
@@ -548,17 +562,29 @@ const upOnce: Cmd = async (a, o) => {
   }
   const allowanceBefore = wallet?.grant?.allowance ?? null;
   const limitLine = subscription ? null : limitPreview(allowanceBefore, c.escrow, getSettings().allowanceTdvpn);
+  // LIM-5 (#38 rc.9, T-A 4): --raise-limit-to N sets the limit to exactly N (never below this deposit).
+  const raiseTo = str(a, 'raise-limit-to');
+  if (raiseTo !== undefined && !/^\d+(\.\d+)?$/.test(raiseTo)) throw new UsageError(`--raise-limit-to needs a number of tDVPN (got "${raiseTo}").`);
+  if (raiseTo !== undefined && BigInt(toBaseUnits(raiseTo)) < BigInt(c.escrow)) {
+    fail(`The limit asked with --raise-limit-to (${raiseTo} tDVPN) is below this deposit (${tdvpn(c.escrow)} tDVPN). Nothing was paid.`, 'spending-limit', `${pinnedUpLine(a, node!.address, inp)} --raise-limit-to ${tdvpn(c.escrow)} --yes`);
+  }
+  const raiseToLine = limitLine && raiseTo !== undefined ? `This computer's spending limit (${tdvpn(String(allowanceBefore))} tDVPN) is below this deposit: --yes first sets it to ${tdvpn(toBaseUnits(raiseTo))} tDVPN (one transaction).` : null;
   // S7: with --yes alone a limit below the deposit is refused (nothing paid); the raise is its own explicit flag.
-  if (limitLine && flag(a, 'yes') && !flag(a, 'raise-limit')) {
+  if (limitLine && flag(a, 'yes') && !flag(a, 'raise-limit') && raiseTo === undefined) {
     // E-88 (blind T-A, rc.6): the line dropped the agent's own --max-price / --protocol; it repeats every flag it gave.
     const lr = limitRefusal(allowanceBefore as string, c.escrow, getSettings().allowanceTdvpn, pinnedUpLine(a, node!.address, inp));
-    fail(lr.message, 'spending-limit', lr.next);
+    fail(lr.message, 'spending-limit', lr.next, lr.alsoNext);
   }
   confirm(a, o, (skipped ? `${skippedNote(skipped)}. ` : '') + (defaults?.capWidened ? `The default cap was widened to ${String(defaults.capWidened)} tDVPN: ${String(defaults.reason).split('; ').pop()}. ` : '') + (already ? `Switch from ${already.node}. ` : '') + (subscription
     ? `Connect to ${node!.address} (${node!.countryCode}) using plan subscription ${subscription.subscription} (no deposit).`
-    : `Connect to ${node!.address} (${node!.countryCode}, ${node!.protocolNames.join(',')}): deposit up to ${c.escrowText} (${inp.units} ${inp.basis === 'per_gb' ? 'GB' : 'h'}), unused part refunded.`) + (limitLine ? ` ${limitLine}` : '') + ' Nothing is signed until you pass --yes.', { node: node!.address, deposit, switchFrom: already?.node ?? null, ...(skipped ? { skipped } : {}), ...(limitLine ? { limitRaise: limitLine } : {}), ...(defaults ? { defaults } : {}) });
+    : `Connect to ${node!.address} (${node!.countryCode}, ${node!.protocolNames.join(',')}): deposit up to ${c.escrowText} (${inp.units} ${inp.basis === 'per_gb' ? 'GB' : 'h'}), unused part refunded.`) + (raiseToLine ? ` ${raiseToLine}` : limitLine ? ` ${limitLine}` : '') + ' Nothing is signed until you pass --yes.', { node: node!.address, deposit, switchFrom: already?.node ?? null, ...(skipped ? { skipped } : {}), ...(limitLine ? { limitRaise: limitLine } : {}), ...(defaults ? { defaults } : {}) });
   const rivals = await rivalVpns();
   if (rivals.length) process.stderr.write(`Warning: another VPN is on (${rivals.join(', ')}). Turn it off first: two VPNs fight over the same traffic.\n`);
+  // LIM-5: the exact limit is signed after the confirm and before any deposit; a failure pays nothing.
+  if (raiseToLine) {
+    const rs = await deviceSetup(raiseTo!);
+    if (!rs.ok) fail(`The spending limit was not set to ${raiseTo} tDVPN: ${rs.error ?? 'device setup failed'}. Nothing was paid.`, 'spending-limit', `${CLI} device setup --allowance ${raiseTo} --yes, then ${pinnedUpLine(a, node!.address, inp)} --yes`);
+  }
   // M13: an agent that reconnected out of a held block is told so (connect() itself refuses a block it cannot lift).
   const blockedBefore = !already && await noInternet();
   const r = await connect({ node: node!.address, basis: inp.basis, units: inp.units, confirmed: true, subscription, ...(already ? { switch: true } : {}), ...(subscription ? {} : { shownEscrow: c.escrow }) });
@@ -576,6 +602,14 @@ const upOnce: Cmd = async (a, o) => {
   if (defaults) ans.defaults = defaults;
   if (dead) { ans.replaced = { node: already!.node, code: 'server-stopped' }; ans.replacedNote = `${SERVER_STOPPED_MESSAGE} Switched to ${r.data!.node}; ${already!.node} is skipped next time.`; }
   if (skipped) { ans.skipped = skipped; ans.skippedNote = skippedNote(skipped); }
+  // W91b (#38 rc.9): a first connect whose limit was capped at the wallet says so, as `device setup` does (W91).
+  if (!subscription && allowanceBefore === null && settingBase !== null) {
+    const after = await refreshWallet().then((w) => w?.grant?.allowance ?? null, (err: Error) => { log.warn('agent up: wallet re-read for the limit note failed', { err: err.message }); return null; });
+    if (typeof after === 'string' && /^\d+$/.test(after) && BigInt(after) < settingBase) {
+      ans.limitCapped = tdvpn(after);
+      ans.limitNote = `No --allowance: the spending limit is this wallet's ${tdvpn(after)} tDVPN, below the Settings limit of ${tdvpn(settingBase.toString())} tDVPN. After funding, raise it with ${CLI} device setup --allowance <N> --yes.`;
+    }
+  }
   if (!subscription && allowanceBefore !== null) {
     const after = await refreshWallet().then((w) => w?.grant?.allowance ?? null, (err: Error) => { log.warn('agent up: wallet re-read for the limit check failed', { err: err.message }); return null; });
     const raised = limitRaise(allowanceBefore, after, c.escrow);
@@ -717,6 +751,18 @@ async function readDeposits(): Promise<PendingSettlement[] | null> {
   }
 }
 
+/** WIN-W5: the kill switch setting is on or persist (unreadable = not known, so nothing is claimed). */
+function killSwitchOn(): boolean {
+  try {
+    const k = getDaemonSettings().settings.killSwitch;
+    return k === 'on' || k === 'persist';
+  } catch (err) {
+    log.warn(`agent status: kill switch setting not read: ${(err as Error).message}`);
+    return false;
+  }
+}
+export const KS_NOT_HOLDING = 'The kill switch is on but is not blocking: the server ended the session and traffic now goes out directly, not through the VPN.';
+
 /** The session the node ended within the last 30 min (dvpnd's own reason in history), else null. */
 function endedByServer(now = Date.now()): { node: string; endedAt: number; reason: string } | null {
   try {
@@ -733,10 +779,11 @@ const status: Cmd = async (a, o) => {
   // M-S (#38 rc.8, macOS kit): a key file others can read was named only by `agent up`; status read exit 0 with the
   // normal next. It stays a read (ok:true), names the problem and sends the agent to the chmod line first.
   const kfm = owner ? keyfileModeProblem(str(a, 'keyfile') ?? process.env.DVPN_KEYFILE) : null;
-  const [wallet, deposits] = await Promise.all([
+  const [wallet, deposits, , clockRead] = await Promise.all([
     owner ? within(refreshWallet(), STATUS_NET_BUDGET_MS, 'the wallet read') : Promise.resolve(null),
     owner ? readDeposits() : Promise.resolve(null),
     within(adoptRunningSession({ watch: false }), STATUS_NET_BUDGET_MS, 'reading the daemon session'),
+    owner ? within(clockCheck(), STATUS_NET_BUDGET_MS, 'the chain clock') : Promise.resolve(null), // WIN-W7
   ]);
   const live = snapshot().session;
   const d = daemonInfo();
@@ -748,6 +795,9 @@ const status: Cmd = async (a, o) => {
   // live session it is cleared once the internet answers direct and no deposit with that server is still open.
   const noNet = !live && !sessionStateUnknown() ? await noInternet() : null;
   const endedRaw = !live ? endedByServer() : null;
+  // WIN-W5 (#38 rc.9, K3-L): the kill switch is on, dvpnd ended the session itself and the internet answers direct:
+  // the block was released while the setting still reads on. Said, never hidden (holding the block is upstream).
+  const ksLeak = !!endedRaw && noNet === false && killSwitchOn();
   const stillOpen = (node: string): boolean => (deposits ?? []).some((x) => x.node === node && (x.status === 'open' || x.status === 'in-use'));
   const ended = endedRaw && !(noNet === false && !stillOpen(endedRaw.node)) ? endedRaw : null;
   const stopped = liveStopped ? { node: live!.node, session: live!.id, reason: 'the exit address is this computer\'s own' } : ended ? { node: ended.node, session: null, reason: ended.reason } : null;
@@ -773,10 +823,17 @@ const status: Cmd = async (a, o) => {
   const startNext = serviceDown ? launchdStartNext(await launchdState(), LAUNCHD_LABEL, LAUNCHD_PLIST) : null;
   const next0 = stopped ? stoppedNext : reconnectNext ? reconnectNext : serviceDown ? startNext ?? nextFor('daemon-missing', process.platform) : dNext ?? statusNext({ owner, wallet, live: connected, reachable: d.reachable, device: d.device, blocked, noWalletNext: missing?.next, reconnectNext: null });
   // M-S: the chmod comes first, except where the way out of a block does (the internet back before anything else).
-  const next = kfm && !next0.startsWith(`${CLI} daemon restore-network`) ? keyfileModeNext(kfm.path) : next0;
+  // CLOCK-UNKNOWN (rc9-c, AC-WIN L3 w11): a read that missed the budget (public RPC 429) or found no chain time was
+  // dropped silently, so status looked like a checked clock. Say it was not checked; never claim a skew.
+  const clock = clockRead && clockRead.kind === 'block' ? clockRead : null;
+  const clockUnknown = !!owner && (clockRead === undefined || clockRead?.kind === 'unknown');
+  // WIN-W7: the way out of a block first, then the key file, then the clock (no server takes a wrong clock).
+  const blockNext = next0.startsWith(`${CLI} daemon restore-network`);
+  const next1 = clock && !blockNext ? CLOCK_NEXT() : next0;
+  const next = kfm && !blockNext ? keyfileModeNext(kfm.path) : next1;
   const message = stopped ? `${SERVER_STOPPED_MESSAGE} ${depositSafe(deposits ?? [])}` : null;
   const ans = {
-    ok: true, address: owner, ...(missing?.code === 'keyfile-missing' ? { keyfileMissing: missing.message } : {}), ...(kfm ? { keyfileMode: keyfileModeText(kfm) } : {}), sol: wallet ? sol(wallet.ownerLamports) : null, solLamports: wallet ? String(wallet.ownerLamports) : null, tdvpn: wallet ? tdvpn(wallet.ownerTdvpn) : null, tdvpnBase: wallet ? String(wallet.ownerTdvpn) : null,
+    ok: true, address: owner, ...(missing?.code === 'keyfile-missing' ? { keyfileMissing: missing.message } : {}), ...(kfm ? { keyfileMode: keyfileModeText(kfm) } : {}), ...(clock ? { clockSkewSec: clock.skewS, clock: clock.error } : clockUnknown ? { clock: 'unknown', clockNote: 'not checked: the chain clock did not answer in time' } : {}), ...(ksLeak ? { killSwitchHolding: false, killSwitch: KS_NOT_HOLDING } : {}), sol: wallet ? sol(wallet.ownerLamports) : null, solLamports: wallet ? String(wallet.ownerLamports) : null, tdvpn: wallet ? tdvpn(wallet.ownerTdvpn) : null, tdvpnBase: wallet ? String(wallet.ownerTdvpn) : null,
     held: wallet ? tdvpn(wallet.userBalance) : null, heldBase: wallet ? String(wallet.userBalance) : null, device: d.device, service: d.reachable,
     connected, ...(connected && live ? { session: live.id, node: live.node, protocol: live.service, spent: tdvpn(live.spent), spentBase: String(live.spent), exitIp: ip?.ip ?? null, wholeDevice: sessionWholeDevice(live), socks: live.proxyEndpoint && !isAndroid() ? `socks5h://${live.proxyEndpoint}` : null } : {}),
     ...(stopped ? { code: 'server-stopped', message, nodeStopped: stopped, alsoNext: stoppedAlso } : {}),

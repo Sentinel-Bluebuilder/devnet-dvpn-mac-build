@@ -57,7 +57,7 @@ CLI needs `--yes`). "Tests" = test scripts or unit tests that run the CLI comman
 | `plans:roster` | readonly | ipc.ts:102 `roster` | `plans roster` | cli-e2e.sh | Plans:53 |
 | `cost:preview` | readonly | ipc.ts:103 `findNode` `ShownError` `costPreview` | `cost` | cli-e2e.sh | **not used by the app** |
 | `rpc:state` | readonly | ipc.ts:108 `getRpcState` | `rpc state` | cli-e2e.sh | Diagnostics:293 |
-| `daemon:doctor` | readonly | ipc.ts:109 `all` `runDoctor` `rivalVpnRow` | `daemon doctor` | cli-e2e.sh, agent-cmd.test.ts, agent-no-dead-end.test.ts, cli-action-hint.test.ts | Diagnostics:215, Diagnostics:230, Diagnostics:242, Diagnostics:254, KillSwitch:208, android/KillSwitchAndroid:179 |
+| `daemon:doctor` | readonly | ipc.ts:109 `all` `runDoctor` `rivalVpnRow` | `daemon doctor` | cli-e2e.sh, agent-cmd.test.ts, agent-no-dead-end.test.ts, audit-final-cli.test.ts | Diagnostics:215, Diagnostics:230, Diagnostics:242, Diagnostics:254, KillSwitch:208, android/KillSwitchAndroid:179 |
 | `drivers:status` | readonly | ipc.ts:116 `driversStatus` `split` | `daemon drivers` | agent-cmd.test.ts | Diagnostics:253, Diagnostics:254 |
 | `history:list` | readonly | ipc.ts:153 `listHistory` | `history list` | cli-e2e.sh | no button: loaded by a screen |
 | `wallet:qr` | readonly | ipc.ts:154 `ownerAddress` `toDataURL` | `wallet receive` | cli-e2e.sh | no button: loaded by a screen |
@@ -88,8 +88,8 @@ CLI needs `--yes`). "Tests" = test scripts or unit tests that run the CLI comman
 | `wallet:import-file` | local | ipc.ts:220 `getFocusedWindow` `tr` `only` | `wallet import` | cli-e2e.sh | Onboarding:253 |
 | `wallet:logout` | local | ipc.ts:234 `logout` `refreshWallet` | `wallet logout` | cli-e2e.sh | Onboarding:152, Wallet:170 |
 | `node-test:stop` | local | ipc.ts:178 `stopNodeTest` | `test stop` | cli-e2e.sh | NodeTest:245 |
-| `daemon-settings:apply` | privileged | ipc.ts:236 `getDaemonSettings` `redactUrls` `some` | `daemon set` | cli-e2e.sh | no button: loaded by a screen |
-| `daemon:init` | privileged | ipc.ts:248 `ownerAddress` `tr` `button` | `daemon init`, `daemon install`, `device register` | cli-e2e.sh, agent-cmd.test.ts, cli-device-hint.test.ts, market-defaults.test.ts | App:131, components/InstallServiceButton:25, Diagnostics:230, Onboarding:289, Onboarding:300, Onboarding:311 |
+| `daemon-settings:apply` | privileged | ipc.ts:236 `getDaemonSettings` `redactUrls` `some` | `daemon set` | cli-e2e.sh, agent-cmd.test.ts | no button: loaded by a screen |
+| `daemon:init` | privileged | ipc.ts:248 `ownerAddress` `tr` `button` | `daemon init`, `daemon install`, `device register` | cli-device-hint.test.ts, cli-e2e.sh, agent-cmd.test.ts, cli-press-service.test.ts | App:131, components/InstallServiceButton:25, Diagnostics:230, Onboarding:289, Onboarding:300, Onboarding:311 |
 | `daemon:restore-network` | privileged | ipc.ts:283 `restoreNetwork` `call` `success` | `daemon restore-network` | agent-cmd.test.ts, cli-action-hint.test.ts, cli-disconnect-ks-persist.test.ts, cli-keyfile-missing.test.ts | no button: loaded by a screen |
 | `drivers:repair` | privileged | ipc.ts:288 `repairDrivers` `broadcast` `removal` | `daemon repair-drivers` | agent-cmd.test.ts, agent-no-dead-end.test.ts, cli-action-hint.test.ts | Diagnostics:254 |
 | `daemon:uninstall` | privileged | ipc.ts:290 `uninstallService` | `daemon uninstall` | **no CLI test** | Diagnostics:319 |
@@ -97,7 +97,7 @@ CLI needs `--yes`). "Tests" = test scripts or unit tests that run the CLI comman
 | `session:connect` | spend | ipc.ts:295 `connect` | `connect`, `connect --plan`, `connect --switch` | cli-e2e.sh, agent-cmd.test.ts, cli-action-hint.test.ts, cli-args-strict.test.ts | components/ConnectSheet:233, android/SplitTunnelAndroid:148, android/SplitTunnelAndroid:148, android/SplitTunnelAndroid:149 |
 | `session:disconnect` | spend | ipc.ts:296 `cancelConnect` `disconnect` | `disconnect`, `disconnect` | cli-e2e.sh, cli-disconnect-ks-persist.test.ts, cli-fresh-agent-wording.test.ts, reconcile-shown-session.test.ts | Home:212, Home:213 |
 | `device:setup` | spend | ipc.ts:298 `deviceSetup` `refreshNow` `wallet` | `device setup` | cli-e2e.sh, agent-cmd.test.ts, agent-contract.test.ts, cli-audit-u23.test.ts | Wallet:154 |
-| `device:setup-plan` | readonly | ipc.ts:297 `deviceSetupPlan` `getSettings` | `device plan` | cli-e2e.sh | Wallet:104 |
+| `device:setup-plan` | readonly | ipc.ts:297 `deviceSetupPlan` `getSettings` | `device plan` | cli-e2e.sh, device-default-cap.test.ts, device-keep-limit.test.ts, device-next-flags.test.ts | Wallet:104 |
 | `device:revoke` | spend | ipc.ts:300 `revokeOtherDevice` `revokeDeviceAccess` | `device revoke` | cli-e2e.sh, agent-cmd.test.ts, state-matrix.test.ts | Wallet:158, Wallet:162 |
 | `plans:subscribe` | spend | ipc.ts:302 `closeSub` `subscribe` `amount` | `plans subscribe`, `plans close` | cli-e2e.sh, cli-audit-u23.test.ts | Plans:107, Plans:119 |
 | `settle:run` | spend | ipc.ts:304 `isWalletAddress` `tr` `AUDIT` | `settle run` | cli-e2e.sh, agent-cmd.test.ts, cli-fresh-agent-wording.test.ts, cli-round2.test.ts | Activity:172, Wallet:166 |

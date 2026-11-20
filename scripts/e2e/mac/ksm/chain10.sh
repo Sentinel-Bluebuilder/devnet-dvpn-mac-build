@@ -19,9 +19,9 @@ say "q0547: $(tail -1 ~/ksm/out/q0547-r11/result.txt)"
 export DVPN_KEYFILE=$HOME/ksm/ksm-wallet.json DVPN_DATA_DIR=$HOME/ksm/profile
 /usr/local/bin/devnet-dvpn daemon set --kill-switch persist --yes >> "$L" 2>&1; sleep 5
 mkdir -p ~/ksm/out/q0547-r11-persist
-/usr/local/bin/devnet-dvpn doctor --json > ~/ksm/out/q0547-r11-persist/user.json 2>&1
-/usr/local/bin/devnet-dvpn doctor > ~/ksm/out/q0547-r11-persist/user.txt 2>&1
-sudo -n /usr/local/bin/devnet-dvpn doctor > ~/ksm/out/q0547-r11-persist/root.txt 2>&1
+/usr/local/bin/devnet-dvpn daemon doctor --json > ~/ksm/out/q0547-r11-persist/user.json 2>&1
+/usr/local/bin/devnet-dvpn daemon doctor > ~/ksm/out/q0547-r11-persist/user.txt 2>&1
+sudo -n /usr/local/bin/devnet-dvpn daemon doctor > ~/ksm/out/q0547-r11-persist/root.txt 2>&1
 /usr/local/bin/devnet-dvpn daemon set --kill-switch off --yes >> "$L" 2>&1; /usr/local/bin/devnet-dvpn daemon restore-network >> "$L" 2>&1
 say "doctor with KS persist: user $(grep -iE "kill.?switch" ~/ksm/out/q0547-r11-persist/user.txt | head -1 | tr -s " " | cut -c1-140) | root $(grep -iE "kill.?switch" ~/ksm/out/q0547-r11-persist/root.txt | head -1 | tr -s " " | cut -c1-140)"
 say "transitions r11 (t4) on $BUILD (6.13)"; bash ~/ksm/transitions.sh r11 't4'

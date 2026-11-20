@@ -1688,10 +1688,15 @@ export async function restoreNetwork(retried = false): Promise<Result> {
     // A stopped service is started without elevation (old installs: 'no-right'); once it
     // answers, one more pass releases its kill switch. Same as linux-app 19bff7a7 (C18).
     // RC9 PF-DEAD: a killed daemon is restarted by launchd/systemd itself ('running'): wait for it and run once more too.
+    // RC9 PF-DEAD-2 (#33 live run 44813895933): a normal user cannot kickstart a system daemon ('no-right'), so the
+    // restore gave up at once; seconds later KeepAlive brought dvpnd back and it RE-APPLIED the kill switch it held
+    // when it died (the block was back after the sweep). Off Windows the service manager restarts it anyway: wait
+    // for it and run once more, which releases the held kill switch (StopSession, as the second restore did live).
     if (!retried) {
       const svc = await startServiceIfStopped();
       log.info('restore network: service start', { svc });
-      if ((svc === 'started' || svc === 'running') && (await waitForDaemon(SERVICE_WAIT_MS, daemonInfo)).reachable) return restoreNetwork(true);
+      const comesBack = svc === 'started' || svc === 'running' || (svc === 'no-right' && process.platform !== 'win32');
+      if (comesBack && (await waitForDaemon(SERVICE_WAIT_MS, daemonInfo)).reachable) return restoreNetwork(true);
     }
     return { ok: false, error: tr('The VPN service is not answering. {osWord}, then press Restore network again.', { osWord: osWord('restartService', process.platform) }), code: 'daemon-unavailable' };
   }

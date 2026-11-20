@@ -61,13 +61,3 @@ describe('row 17: doctor checks the LaunchDaemon runs and the socket answers', (
   });
 });
 
-describe('RC9 PF-DEAD: restore-network with the service not answering names a runnable next', () => {
-  it('macOS: the kickstart line, then restore-network again', async () => {
-    const { restoreUnavailableNext } = await import('../../src/core/daemon/darwin-launchd');
-    expect(restoreUnavailableNext('darwin', L, 'devnet-dvpn')).toBe(`sudo launchctl kickstart -k system/${L}, then devnet-dvpn daemon restore-network`);
-  });
-  it('negative control: other platforms keep daemon doctor', async () => {
-    const { restoreUnavailableNext } = await import('../../src/core/daemon/darwin-launchd');
-    expect(restoreUnavailableNext('linux', L, 'devnet-dvpn')).toBe('devnet-dvpn daemon doctor');
-  });
-});

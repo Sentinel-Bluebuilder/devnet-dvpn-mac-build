@@ -37,10 +37,6 @@ function bareThrows(): string[] {
 
 /** Off the agent path: a person types these, and the text is the whole answer. One reason each. */
 const ALLOWED: Record<string, string> = {
-  "commands.ts|if (!s) throw new Error('You do not hold that subscription.');|1": 'connect --plan (the agent uses agent up --plan: no-subscription)',
-  "commands.ts|if (!n) throw new Error('No such node.');|1": 'connect <node> (the agent uses agent up --node: no-nodes)',
-  "info-cmd.ts|if (bad.length) throw new Error(`Not accepted (https only; http only for 127.0.0.1): ${bad.map(redactUrls).join(', ')}`);|1": 'rpc set (operator)',
-  "info-cmd.ts|if (rejected.length) throw new Error(`The value for ${rejected.join(', ')} is not allowed, so it was left unchanged.`);|1": 'settings set (operator)',
   "info-cmd.ts|if (!sep) throw new Error('The current session has no SOCKS endpoint (only V2Ray/Xray sessions do). Nothing was opened.');|1": 'proxy browser (a person opens a browser)',
   "info-cmd.ts|if (!ep) throw new Error('The current session has no SOCKS endpoint (only V2Ray/Xray sessions do). Nothing was changed.');|1": 'proxy on (a person changes the system proxy)',
   "poll-cmd.ts|if (runs.some((r) => !r.ok)) throw new Error(`${runs.filter((r) => !r.ok).map((r) => r.name).join(', ')} failed.`);|1": 'poll run (operator diagnostics)',

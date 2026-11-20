@@ -25,7 +25,7 @@ import {
 } from '../../core/daemon/service-state';
 import { carrySettingsInto, patchToml, readToml, renderServiceConfig, TUN_SERVICES } from '../../core/daemon/config';
 import {
-  CLIENT_INSTANCE, DAEMON_GROUP, SOCKET_FILE,
+  CLIENT_INSTANCE, CONFIG_FILE, DAEMON_GROUP, SOCKET_FILE,
   daemonBinaryName, daemonEndpoint, doctorArgs, initArgs, instanceDir,
   keyListArgs, legacyHome, operatorKey, serviceName,
 } from '../../core/daemon/layout';
@@ -42,6 +42,9 @@ export const SERVICE_NAME = 'dvpnd-client';
 export const SERVICE_LABEL = serviceName('darwin', CLIENT_INSTANCE);
 export const SERVICE_PLIST = `/Library/LaunchDaemons/${SERVICE_LABEL}.plist`;
 const DEVICE_FILE = 'device.json';
+/** E-ST owner (#38 rc.9): set when the installed service's key was adopted; its config.toml may still name the
+ *  owner it was set up for (root-only, unreadable here), so the next install step passes --Owner. */
+const OWNER_PENDING_FILE = 'service-owner-pending.json';
 const HEALTH_MS = 15_000;
 
 // ─── Paths ───
@@ -51,8 +54,22 @@ export function resourcesDir(): string {
 export const binPath = (name: string): string => path.join(resourcesDir(), 'bin', name);
 export const scriptPath = (name: string): string => path.join(resourcesDir(), 'scripts', name);
 export const protoPath = (): string => path.join(resourcesDir(), 'daemon.proto');
+/** A packaged build: its resources sit inside a `.app` bundle (the app, and the CLI it ships). Exported for tests. */
+export function packagedBuild(res: string = resourcesDir()): boolean {
+  return /\.app\/Contents\/Resources(\/|$)/.test(res);
+}
+/**
+ * The dvpnd binary. DVPND_BIN is a dev/test override only (AC-MAC-1 C3): setup-daemon.sh installs this binary as the
+ * root service, so in a packaged build an env var must never choose it. Exported for tests.
+ */
+export function dvpndPathFor(env: NodeJS.ProcessEnv, res: string, exists: (p: string) => boolean = fs.existsSync): string {
+  const bundled = path.join(res, 'bin', daemonBinaryName('darwin'));
+  if (!env.DVPND_BIN) return bundled;
+  if (packagedBuild(res)) { log.warn('DVPND_BIN is ignored in a packaged build', { bin: env.DVPND_BIN }); return bundled; }
+  return exists(env.DVPND_BIN) ? env.DVPND_BIN : bundled;
+}
 export function dvpndPath(): string {
-  return process.env.DVPND_BIN && fs.existsSync(process.env.DVPND_BIN) ? process.env.DVPND_BIN : binPath(daemonBinaryName('darwin'));
+  return dvpndPathFor(process.env, resourcesDir());
 }
 
 // dvpnd finds V2Ray/Xray/Hysteria2 only on PATH (go-sdk service.LookPath). Each lives in its own
@@ -763,9 +780,29 @@ export function killSwitchOffByDefault(staging: string, live = DEFAULT_DAEMON_HO
   }
 }
 
-export function initDevice(owner: string): Promise<{ ok: boolean; device?: string; error?: string }> {
+/** E-ST (#38 rc.9): what initDevice needs to adopt an installed service's key (injected in tests). */
+export interface AdoptDeps { record: () => DeviceRecord | null; home: string; has: (file: string) => boolean; detect: (home: string) => Promise<{ ok: boolean; device?: string; error?: string }>; register: (device: string, owner: string, home: string) => void; markOwnerPending?: (owner: string) => void }
+
+/** A computer with no device record whose service is installed uses the service's own key (recorded for `owner`).
+ *  null = nothing to adopt (a record exists, no service home, or its key could not be read): mint as before. */
+export async function adoptInstalledDevice(owner: string, deps: AdoptDeps = { record: deviceRecord, home: DEFAULT_DAEMON_HOME, has: (f) => fs.existsSync(f), detect: detectDevice, register: registerDevice, markOwnerPending: (o) => writeJson(OWNER_PENDING_FILE, { owner: o, at: Date.now() }) }): Promise<string | null> {
+  if (deps.record() || !deps.has(path.join(deps.home, CONFIG_FILE))) return null;
+  const d = await deps.detect(deps.home);
+  if (!d.ok || !d.device) { log.warn('device: the installed service key could not be read; a new key is made', { err: d.error }); return null; }
+  deps.register(d.device, owner, deps.home);
+  deps.markOwnerPending?.(owner); // E-ST owner: the service may still run for the owner it was set up for
+  log.info('device: adopted the installed service key', { device: d.device, home: deps.home });
+  return d.device;
+}
+
+export async function initDevice(owner: string): Promise<{ ok: boolean; device?: string; error?: string }> {
   const existing = deviceRecord();
-  if (existing && existing.owner === owner) return Promise.resolve({ ok: true, device: existing.device });
+  if (existing && existing.owner === owner) return { ok: true, device: existing.device };
+  // E-ST: never mint a staging key beside an installed service (wallet show then named the wrong device).
+  if (!existing) {
+    const adopted = await adoptInstalledDevice(owner);
+    if (adopted) return { ok: true, device: adopted };
+  }
   const exe = dvpndPath();
   if (!fs.existsSync(exe)) return Promise.resolve({ ok: false, error: 'The VPN service is missing from this install. Reinstall the app.' });
   const staging = stagingHome();
@@ -867,7 +904,12 @@ export async function grantPipeAccess(): Promise<{ ok: boolean; error?: string }
 
 /** A device key made for a new wallet waits in the staging home until the service is (re)installed. */
 export function installPending(): boolean {
-  return fs.existsSync(path.join(stagingHome(), 'config.toml'));
+  return fs.existsSync(path.join(stagingHome(), 'config.toml')) || ownerPending() !== null;
+}
+
+/** E-ST owner: the owner an adopted service still has to be set to, or null (exported for tests). */
+export function ownerPending(): string | null {
+  return readJson<{ owner?: string } | null>(OWNER_PENDING_FILE, null)?.owner ?? null;
 }
 
 /** Elevated: move the staged home into /var/db/dvpnd and run it as a LaunchDaemon. Call after device setup. */
@@ -881,7 +923,7 @@ export function deviceHomeGone(): string | null {
 }
 
 /** `staging` = the home to install: the staging home, or the wallet-switch scratch folder (rc.4 E-55, #31 b15c05f). */
-export async function installService(staging = stagingHome()): Promise<{ ok: boolean; error?: string; waitingForNetwork?: boolean; data?: { relogin: boolean } }> {
+export async function installService(staging = stagingHome()): Promise<{ ok: boolean; error?: string; code?: string; waitingForNetwork?: boolean; data?: { relogin: boolean } }> {
   const rec = deviceRecord();
   if (!rec) return { ok: false, error: 'Initialise the device first.' };
   const user = loginName();
@@ -892,15 +934,17 @@ export async function installService(staging = stagingHome()): Promise<{ ok: boo
     r = await runElevated(scriptPath('setup-daemon.sh'), {
       Dvpnd: dvpndPath(), Staging: staging, DaemonHome: rec.home, BinRoot: path.dirname(binPath('x')),
       Group: SOCKET_GROUP, Service: SERVICE_NAME, Instance: CLIENT_INSTANCE, Label: SERVICE_LABEL,
+      // E-ST owner: a kept home (same device key) is set to the wallet recorded for this device.
+      Owner: rec.owner,
       ...(user ? { User: user } : {}), ...(cli ? { Cli: cli } : {}),
     }, 300_000, () => verifyInstalled(rec.home));
   } finally {
     installing -= 1;
   }
-  if (r.status === 'ok') noteServiceStarting();
+  if (r.status === 'ok') { noteServiceStarting(); if (ownerPending()) writeJson(OWNER_PENDING_FILE, null); }
   relinkDaemon();
   // waitingForNetwork: installed, but dvpnd checks the RPC before it serves; launchd retries every minute.
-  return r.status === 'ok' ? { ok: true, ...(r.waitingForNetwork === true ? { waitingForNetwork: true } : {}) } : { ok: false, error: r.detail };
+  return r.status === 'ok' ? { ok: true, ...(r.waitingForNetwork === true ? { waitingForNetwork: true } : {}) } : { ok: false, error: r.detail, ...(r.code ? { code: r.code } : {}) }; // WIN-W4: needs-admin passes through
 }
 
 /**

@@ -54,9 +54,13 @@ function scanSecrets(arch) {
 function checkArch(arch) {
   const want = arch === 'x64' ? 'x86_64' : 'arm64';
   const app = path.join('dist', arch === 'x64' ? 'mac' : 'mac-arm64', 'Devnet dVPN.app');
-  const bins = [path.join(app, 'Contents', 'MacOS', 'Devnet dVPN')];
-  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (e.isFile() && (fs.statSync(p).mode & 0o111)) bins.push(p); } };
-  walk(path.join(app, 'Contents', 'Resources', 'resources', 'bin'));
+  // Every Mach-O in the WHOLE app (not only resources/bin): verify-release on v0.3.0-rc8 found universal
+  // node_gyp_bins/python3 copies and darwin-x64 .node prebuilds under app.asar.unpacked that this missed.
+  const MACHO = new Set(['feedfacf', 'cffaedfe', 'feedface', 'cefaedfe', 'cafebabe', 'bebafeca']);
+  const isMachO = (p) => { const fd = fs.openSync(p, 'r'); try { const b = Buffer.alloc(4); return fs.readSync(fd, b, 0, 4, 0) === 4 && MACHO.has(b.toString('hex')); } finally { fs.closeSync(fd); } };
+  const bins = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (e.isFile() && isMachO(p)) bins.push(p); } };
+  walk(app);
   for (const b of bins) {
     const got = execFileSync('lipo', ['-archs', b], { encoding: 'utf8' }).trim();
     if (got !== want) throw new Error(`${b} is ${got}, the ${arch} package needs ${want}`);

@@ -11,3 +11,10 @@ export function deviceLimitFor(settingBase: bigint, depositBase: bigint): bigint
   const room = depositBase * DEPOSITS_PER_RAISE;
   return room > settingBase ? room : settingBase;
 }
+
+/** W91b (#38 rc.9): a first setup with no allowance given is capped at what the wallet holds (never below this
+ *  deposit; not capped when it holds nothing or that is unknown), the same rule as `device setup` (W91). */
+export function firstSetupLimit(wantBase: bigint, ownBase: bigint | null, depositBase: bigint): bigint {
+  if (ownBase === null || ownBase <= 0n || ownBase >= wantBase) return wantBase;
+  return ownBase > depositBase ? ownBase : depositBase;
+}

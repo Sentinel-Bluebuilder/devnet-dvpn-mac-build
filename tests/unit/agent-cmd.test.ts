@@ -49,7 +49,8 @@ const hostDir = vi.hoisted(() => ({ dir: '' })); // B-UP: the agent up lock live
 vi.mock('../../src/main/host', () => ({ getHost: () => ({ dataDir: hostDir.dir }) }));
 vi.mock('../../src/main/scheduler', () => ({ runJobNow: async () => ({ ok: true }) }));
 // E-73: `walletAfter` is what a read after connect() returns (connect may have raised the limit).
-vi.mock('../../src/main/services/wallet', () => ({ refreshWallet: async () => (st.calls.connect.length && st.walletAfter ? st.walletAfter : st.wallet) }));
+const setups = vi.hoisted(() => [] as string[]); // LIM-5: what device setup was asked to set
+vi.mock('../../src/main/services/wallet', () => ({ refreshWallet: async () => (st.calls.connect.length && st.walletAfter ? st.walletAfter : st.wallet), deviceSetup: async (allowance: string) => { setups.push(allowance); return { ok: true, data: 'SigLim' }; } }));
 vi.mock('../../src/main/services/nodes', () => ({ refreshNodes: async () => st.nodes, nodeViews: () => st.nodes }));
 // Skip the server that just failed: the file is faked, the pool logic (withoutFailed / skippedNote) is real.
 const hist = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
@@ -882,12 +883,40 @@ describe('C-CLOCK: agent up with a wrong clock', () => {
   it('one command per OS', () => {
     expect(nextFor('clock-skew', 'linux')).toBe('sudo timedatectl set-ntp true && (sudo chronyc makestep 2>/dev/null || true), then devnet-dvpn agent up --yes');
     expect(nextFor('clock-skew', 'darwin')).toBe('sudo sntp -sS time.apple.com, then devnet-dvpn agent up --yes');
-    expect(nextFor('clock-skew', 'win32')).toBe('w32tm /resync (from an elevated shell), then devnet-dvpn agent up --yes');
+    expect(nextFor('clock-skew', 'win32')).toBe('Start-Service w32time; w32tm /resync /force (elevated PowerShell), then devnet-dvpn agent up --yes');
   });
   it('negative control: after a code that may leave a deposit open, that deposit is still named (E-22 a)', async () => {
     st.connectResult = { ok: false, error: 'x', code: 'tunnel-failed' };
     st.settlements = [{ channel: 'ChanOpen', node: 'NodeB', mode: 0, escrow: '2000000', status: 'open', refundable: '2000000', readyAt: null }];
     expect((await run('agent up --yes')).error?.action).toMatch(/^a deposit of 2 tDVPN is open with this node \(ChanOpen\)/);
+  });
+});
+
+// ─── L-RPC (#38 rc.8, Linux R4): waiting-for-network = nothing paid, exit 6, next = the daemon set --rpc line ───
+describe('L-RPC: agent up while the service cannot reach its RPC', () => {
+  const WFN = 'Waiting for the network. The VPN service started before this device was online and is still trying to reach the Solana network. Nothing was paid.';
+  const SET_RPC = 'devnet-dvpn daemon set --rpc <https url> --yes (the VPN service\'s Solana connection), then devnet-dvpn agent up --yes';
+  it('an older deposit with that node is never named: next = the daemon set --rpc line', async () => {
+    st.connectResult = { ok: false, error: WFN, code: 'waiting-for-network' };
+    st.settlements = [{ channel: 'ChanOld', node: 'NodeB', mode: 0, escrow: '2000000', status: 'closing', refundable: '1883', readyAt: null }];
+    const r = await run('agent up --yes');
+    expect(r.error?.code).toBe('waiting-for-network');
+    expect(r.error?.message).toBe(WFN);
+    expect(r.error?.action).toBe(SET_RPC);
+  });
+  it('its class: nothing was paid, exit 6 (network: retry later)', async () => {
+    const { moneyOf } = await import('../../src/cli/money-note');
+    const { exitCodeFor } = await import('../../src/cli/exit-codes');
+    expect(moneyOf('waiting-for-network')).toBe('none');
+    expect(exitCodeFor('waiting-for-network')).toBe(6);
+  });
+  it('negative control: a code after which a deposit may be open still names it (E-22 a), and stays exit 1', async () => {
+    const { exitCodeFor } = await import('../../src/cli/exit-codes');
+    st.connectResult = { ok: false, error: 'x', code: 'tunnel-failed' };
+    st.settlements = [{ channel: 'ChanOld', node: 'NodeB', mode: 0, escrow: '2000000', status: 'open', refundable: '2000000', readyAt: null }];
+    expect((await run('agent up --yes')).error?.action).toMatch(/^a deposit of 2 tDVPN is open with this node \(ChanOld\)/);
+    expect(exitCodeFor('tunnel-failed')).toBe(1);
+    expect(exitCodeFor('rpc-timeout')).toBe(1);
   });
 });
 
@@ -907,15 +936,50 @@ describe('agent up: spending limit below the deposit (E-73)', () => {
     cheap(); st.wallet = { ...funded, grant: { allowance: '1000' } }; st.calls.connect.length = 0;
     const r = await run('agent up --node NodeA --yes');
     expect(r.error?.code).toBe('spending-limit');
-    expect(r.error?.message).toBe('Spending limit 0.001 tDVPN is below this deposit (0.002 tDVPN). Nothing was paid. Add --raise-limit to raise it to 0.02 tDVPN.');
-    expect(r.error?.action).toBe('devnet-dvpn agent up --node NodeA --basis per_gb --units 1 --raise-limit --yes');
+    expect(r.error?.message).toBe('Spending limit 0.001 tDVPN is below this deposit (0.002 tDVPN). Nothing was paid. next sets the limit to this deposit (0.002 tDVPN); alsoNext raises it to 0.02 tDVPN with --raise-limit.');
+    expect(r.error?.action).toBe('devnet-dvpn device setup --allowance 0.002 --yes, then devnet-dvpn agent up --node NodeA --basis per_gb --units 1 --yes'); // LIM-1 (rc.9)
+    expect((r.error as { alsoNext?: string }).alsoNext).toBe('devnet-dvpn agent up --node NodeA --basis per_gb --units 1 --raise-limit --yes');
     expect(st.calls.connect).toHaveLength(0);
+  });
+  it('LIM-1 (rc.9, T-A 3): next sets the limit to this deposit only; the Settings-wide raise is alsoNext; nothing paid', async () => {
+    cheap(); st.wallet = { ...funded, grant: { allowance: '1000' } }; st.calls.connect.length = 0;
+    const r = await run('agent up --node NodeA --max-price 0.01 --yes');
+    expect(r.error?.code).toBe('spending-limit');
+    expect(r.error?.action).toMatch(/^devnet-dvpn device setup --allowance 0\.002 --yes, then devnet-dvpn agent up --node NodeA .*--max-price 0\.01 --yes$/);
+    expect(r.error?.action).not.toMatch(/--raise-limit/);
+    expect((r.error as { alsoNext?: string }).alsoNext).toMatch(/--max-price 0\.01 --raise-limit --yes$/);
+    expect(st.calls.connect).toHaveLength(0);
+    const { errorOutput } = await import('../../src/cli/error-out');
+    const j = JSON.parse(errorOutput(r.error, true, 'agent up').text);
+    expect(j.alsoNext).toBe((r.error as { alsoNext?: string }).alsoNext);
+    expect(JSON.parse(errorOutput(Object.assign(new Error('x'), { code: 'node-gone', action: 'y' }), true, 'agent up').text).alsoNext).toBeUndefined(); // negative control
+  });
+  it('LIM-5 (rc.9, T-A 4): --raise-limit-to 0.005 sets the limit to exactly 0.005 before the deposit, then connects', async () => {
+    cheap(); st.wallet = { ...funded, grant: { allowance: '1000' } }; st.calls.connect.length = 0; setups.length = 0;
+    const r = await run('agent up --node NodeA --raise-limit-to 0.005 --yes');
+    expect(r.error).toBeNull();
+    expect(setups).toEqual(['0.005']);
+    expect(st.calls.connect).toHaveLength(1);
+  });
+  it('LIM-5: --raise-limit-to below this deposit is refused, nothing signed or paid; next = the line with the deposit', async () => {
+    cheap(); st.wallet = { ...funded, grant: { allowance: '1000' } }; st.calls.connect.length = 0; setups.length = 0;
+    const r = await run('agent up --node NodeA --raise-limit-to 0.001 --yes');
+    expect(r.error?.code).toBe('spending-limit');
+    expect(r.error?.action).toBe('devnet-dvpn agent up --node NodeA --basis per_gb --units 1 --raise-limit-to 0.002 --yes');
+    expect(setups).toEqual([]);
+    expect(st.calls.connect).toHaveLength(0);
+  });
+  it('LIM-5 negative control: a limit already above the deposit: --raise-limit-to signs nothing extra', async () => {
+    cheap(); st.wallet = { ...funded, grant: { allowance: '9000000' } }; st.calls.connect.length = 0; setups.length = 0;
+    expect((await run('agent up --node NodeA --raise-limit-to 0.005 --yes')).error).toBeNull();
+    expect(setups).toEqual([]);
   });
   it('E-88 (blind T-A, rc.6): the refusal line keeps the agent\'s own --protocol and --max-price', async () => {
     cheap(); st.wallet = { ...funded, grant: { allowance: '1000' } }; st.calls.connect.length = 0;
     const r = await run('agent up --protocol v2ray --node NodeA --max-price 0.01 --yes');
     expect(r.error?.code).toBe('spending-limit');
-    expect(r.error?.action).toBe('devnet-dvpn agent up --node NodeA --protocol v2ray --basis per_gb --units 1 --max-price 0.01 --raise-limit --yes');
+    expect(r.error?.action).toBe('devnet-dvpn device setup --allowance 0.002 --yes, then devnet-dvpn agent up --node NodeA --protocol v2ray --basis per_gb --units 1 --max-price 0.01 --yes'); // LIM-1 (rc.9)
+    expect((r.error as { alsoNext?: string }).alsoNext).toBe('devnet-dvpn agent up --node NodeA --protocol v2ray --basis per_gb --units 1 --max-price 0.01 --raise-limit --yes');
     expect(st.calls.connect).toHaveLength(0);
   });
   it('answer after --raise-limit --yes names the raise: limitRaised {from,to} and limitNote with the command that lowers it', async () => {
@@ -1091,6 +1155,20 @@ describe('agent status: fresh computer (E-84)', () => {
 });
 
 // ─── L-DROP (#38 rc.8, Linux R4): no --max-price, the cheap nodes offline, the 50 node up, limit 150 ───
+describe('LIM-3 (rc.9, T-A 25): defaults.spendingLimit is the live limit', () => {
+  it('a raised grant (299.997) with Settings at 150: spendingLimit = 299.997 (grant), configuredDefault = 150', async () => {
+    st.allowanceTdvpn = '150'; st.wallet = { ...funded, ownerTdvpn: '200000000', grant: { allowance: '299997000' } };
+    const r = await run('agent up --yes');
+    const d = (r.data[0] as { defaults: Record<string, unknown> }).defaults;
+    expect(d).toMatchObject({ spendingLimit: '299.997', spendingLimitSource: 'grant', configuredDefault: '150' });
+  });
+  it('negative control: no grant read: spendingLimit = the Settings amount, source settings', async () => {
+    st.allowanceTdvpn = '150'; st.wallet = { ...funded, ownerTdvpn: '200000000' };
+    const d = ((await run('agent up --yes')).data[0] as { defaults: Record<string, unknown> }).defaults;
+    expect(d).toMatchObject({ spendingLimit: '150', spendingLimitSource: 'settings', configuredDefault: '150' });
+  });
+});
+
 describe('L-DROP: the default cap widens to the cheapest answering node within the spending limit', () => {
   const off = (address: string): Record<string, unknown> => node(address, { pricePerGb: '1000', probe: { ok: false, latencyMs: 0 } });
   const live4 = (): Record<string, unknown>[] => [off('C1'), off('C2'), off('C3'), node('Dray', { pricePerGb: '50000000' })];

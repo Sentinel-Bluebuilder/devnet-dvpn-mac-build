@@ -12,11 +12,14 @@ async function clockDoctorRow(): Promise<{ name: string; ok: boolean; level: 'ok
     ? { name: 'clock', ok: false, level: 'fail', detail: `${b.error} Fix: ${CLOCK_NEXT_DOCTOR()}`, clockSkewSec: skew }
     : { name: 'clock', ok: true, level: 'ok', detail: `${skew} s from the chain (servers refuse past ${CLOCK_SKEW_REFUSE_S} s)`, clockSkewSec: skew };
 }
-const CLOCK_NEXT_DOCTOR = (): string => process.platform === 'win32' ? 'w32tm /resync (from an elevated shell)' : process.platform === 'darwin' ? 'sudo sntp -sS time.apple.com' : 'sudo timedatectl set-ntp true && (sudo chronyc makestep 2>/dev/null || true)';
+const CLOCK_NEXT_DOCTOR = (): string => process.platform === 'win32' ? 'Start-Service w32time; w32tm /resync /force (elevated PowerShell)' : process.platform === 'darwin' ? 'sudo sntp -sS time.apple.com' : 'sudo timedatectl set-ntp true && (sudo chronyc makestep 2>/dev/null || true)';
+
+/** U1-O: the elevated install (PowerShell; Windows asks for an administrator's name and password). */
+export const NEEDS_ADMIN_NEXT = `Start-Process ${CLI_NAME} -Verb RunAs -ArgumentList 'daemon install --yes'`;
 
 // ─── `daemon` — the VPN service: version, doctor, drivers, init, install, settings, restore ───
 // Split from commands.ts (500-line rule); same services as the app's Diagnostics + Settings.
-import { cliErr, CLI_NAME } from './cli-fail';
+import { cliErr, CLI_NAME, INIT_NEXT, installNotReadyNext, restoreDeadNext } from './cli-fail';
 import fs from 'node:fs';
 import { str, UsageError } from './args';
 import { confirm, need, walletRead, type Cmd } from './commands';
@@ -25,7 +28,7 @@ import { snapshot } from '../main/app-state';
 import { driversStatus, repairDrivers, driverLines, DRIVER_LABELS, type DriverReport } from '../main/system/drivers';
 import { daemon, daemonInfo, deviceRecord, dvpndPath, runDoctor, initDevice, installService, uninstallService } from '../main/daemon/manager';
 import { launchdState, LAUNCHD_LABEL, LAUNCHD_PLIST } from '../main/daemon/launchd-state';
-import { darwinDoctorRows, restoreUnavailableNext } from '../core/daemon/darwin-launchd';
+import { darwinDoctorRows } from '../core/daemon/darwin-launchd';
 import { isAndroid } from '../shared/is-android';
 import { runHomeMigration } from '../main/daemon/migrate-run';
 import { log } from '../main/logger';
@@ -34,6 +37,7 @@ import { checkMark } from '../shared/check-level';
 import { applyServiceSettings, settingsProblem } from '../main/services/daemon-apply';
 import { dnsDoctorRow, probeDns, dnsProbeProblem } from '../main/system/dns-probe';
 import { rivalVpnRow } from '../main/system/tunnels';
+import { isAdminAccount } from '../main/system/admin-check';
 import { ownerAddress } from '../main/wallet/vault';
 import { DNS_PRESETS, validateSettings, redactRpcUrl, type DaemonSettings, type SplitMode } from '../core/daemon/config';
 import { tdvpn } from '../core/chain/amounts';
@@ -129,11 +133,11 @@ export const daemonCmd: Cmd = async (a, o) => {
     o.print([...lines, 'All VPN drivers are ready.'].join('\n'), r);
   } else if (sub === 'init') {
     const owner = ownerAddress();
-    if (!owner) throw new UsageError('create or import a wallet first');
+    if (!owner) throw cliErr('no-wallet', `${CLI_NAME} wallet create --keyfile <path> --yes, then fund the address it prints`, 'Create or import a wallet first: the device key is made for a wallet. Nothing was paid.'); // AUD-2 M10
     const r = await initDevice(owner);
     if (!r.ok) throw cliErr('no-device-key', `${CLI_NAME} daemon doctor --json`, r.error ?? 'The service step failed with no message. Nothing was paid.');
     // Android: the engine runs inside the app, so there is no service to install.
-    o.print(`Device ${r.device} created for this wallet. Next: device setup --yes${isAndroid() ? '' : ', then daemon install --yes'}`, r);
+    o.print(`Device ${r.device} created for this wallet. Next: ${INIT_NEXT}${isAndroid() ? '' : `, then ${CLI_NAME} daemon install --yes`}`, { ...r, next: INIT_NEXT });
   } else if (sub === 'migrate') {
     // Run by the installer (already elevated) on an update from a pre-cb33 build; safe to repeat.
     confirm(a, o, 'Move the VPN service home of an older version to the new layout (same device key, same settings). Needs administrator rights.');
@@ -143,6 +147,8 @@ export const daemonCmd: Cmd = async (a, o) => {
     if (r.status === 'skipped') { o.print(`Nothing to move (${r.reason}).`, r); return; }
     o.print([...r.log, `Moved ${r.from} -> ${r.to}.`].join('\n'), r);
   } else if (sub === 'install') {
+    // U1-O (#38 rc.9): a standard user learns it first, not after the wallet and device checks (AC-WIN rc.8).
+    if (isAdminAccount() === false) throw cliErr('needs-admin', NEEDS_ADMIN_NEXT, 'Installing the VPN service needs an administrator, and this Windows account is a standard user. Run the command below: Windows asks for an administrator\'s name and password. Nothing was paid.');
     if (!ownerAddress()) throw cliErr('no-wallet', `${CLI_NAME} wallet create --keyfile <path> --yes, then fund the address it prints`, 'Create or import a wallet, then run "device setup --yes": the service will not start without a funded, permitted device.');
     // Offline repair (port of #33 0790fc2): when the balances cannot be read but this wallet already
     // set up a device here, the service is reinstalled anyway (it needs no network to start).
@@ -153,9 +159,12 @@ export const daemonCmd: Cmd = async (a, o) => {
       if (deviceRecord()?.owner !== ownerAddress()) throw readErr;
       log.warn('daemon install: balances unreadable, repairing for the recorded device', { err: (readErr as Error).message });
     }
-    if (w && !w.ready) throw cliErr('device-not-ready', `${CLI_NAME} device setup --yes, then ${CLI_NAME} daemon install --yes`, 'Run "device setup --yes" first: the service will not start without a funded, permitted device.');
+    // AUD-1: with no device key here, init comes first (device setup alone refuses: no-device-key).
+    if (w && !w.ready) { const hasKey = !!deviceRecord()?.device; throw cliErr('device-not-ready', installNotReadyNext(hasKey), `${hasKey ? 'Run "device setup --yes" first' : 'Run "daemon init --yes", then "device setup --yes" first'}: the service will not start without a funded, permitted device.`); }
     confirm(a, o, 'Install (or update to this app version) and start the VPN service (one administrator prompt). With kill switch on, a stopped session blocks internet until you disconnect or restore network.');
     const r = await installService();
+    // WIN-W4: RunAs could not show a prompt here (no desktop): a person's step, not a failed install.
+    if (!r.ok && r.code === 'needs-admin') throw cliErr('needs-admin', `open PowerShell with "Run as administrator" (or SSH in as an administrator), then ${CLI_NAME} daemon install --yes`, r.error ?? 'An administrator is needed. Nothing was changed.');
     if (!r.ok) throw cliErr('install-failed', `${CLI_NAME} daemon doctor --json`, r.error ?? 'The service step failed with no message. Nothing was paid.');
     // relogin: Windows grants the pipe at the next sign-in; waitingForNetwork: macOS' service waits for a network first.
     const waiting = (r as { waitingForNetwork?: boolean }).waitingForNetwork === true;
@@ -274,9 +283,8 @@ export const daemonCmd: Cmd = async (a, o) => {
     if (problem) throw cliErr('dns-no-answer', `${CLI_NAME} daemon doctor --json`, problem); // exit 1: scripts can gate on it
   } else if (sub === 'restore-network') {
     const r = await restoreNetwork();
-    // RC9 PF-DEAD (#33 run 44808199308, pf_restore1): the service not answering came back with next:null and
-    // "Restart the Mac". On macOS it is one launchctl line (launchd restarts the daemon), then the restore again.
-    if (!r.ok && r.code === 'daemon-unavailable') throw cliErr('daemon-unavailable', restoreUnavailableNext(process.platform, LAUNCHD_LABEL, CLI_NAME), r.error ?? 'The VPN service is not answering.');
+    // RESTORE-DEAD-NEXT (#38 rc.9): never ok and never next:null while the service is dead (it may still hold the block).
+    if (!r.ok && r.code === 'daemon-unavailable') throw cliErr('daemon-unavailable', restoreDeadNext(), r.error ?? 'The VPN service is not answering.');
     need(r);
     o.print('Network restored.', r);
   } else if (sub === 'uninstall') {

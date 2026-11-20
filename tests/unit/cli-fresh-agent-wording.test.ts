@@ -30,6 +30,13 @@ vi.mock('../../src/main/services/nodes', async (orig) => ({ ...(await orig<objec
 vi.mock('../../src/main/system/settings', async (orig) => ({ ...(await orig<object>()), getSettings: () => ({ thirdPartyChecks: true }) }));
 vi.mock('../../src/core/quality/quality', async (orig) => ({ ...(await orig<object>()), publicIp: async () => ({ ip: '203.0.113.7', source: '1.0.0.1' }) }));
 
+// rc.9 (AC-WIN dvw-build): app-state emits on a setImmediate after patch(); with no host that threw after the test
+// (vitest: 1 unhandled error, exit 1). The CLI entry always sets a host first, so the test does too.
+const { setHost } = await import('../../src/main/host');
+const { mkdtempSync } = await import('node:fs');
+const { tmpdir } = await import('node:os');
+const { join } = await import('node:path');
+setHost({ name: 'cli', resourcesDir: '', dataDir: mkdtempSync(join(tmpdir(), 'fa-')), keyStore: {} as never, emit: () => undefined });
 const { COMMANDS, PRICE_UNIT } = await import('../../src/cli/commands');
 const { IP_SOURCE_NOTE } = await import('../../src/cli/info-cmd');
 const { parseArgs } = await import('../../src/cli/args');

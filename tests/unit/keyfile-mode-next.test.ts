@@ -1,12 +1,11 @@
-// #38 rc.8 macOS audit (M-S keyfile-mode): the chmod in `next` must run verbatim on a path with spaces.
-import { describe, expect, it, vi } from 'vitest';
+// #38 rc.8 (port of #33 3b64e34c5, AC-MAC-3): the chmod in keyfile-mode `next` must run verbatim on a path with spaces.
+import { describe, expect, it } from 'vitest';
 
-vi.mock('../../src/main/daemon/launchd-state', () => ({ launchdState: async () => ({ installed: null, loaded: false, running: false }), LAUNCHD_LABEL: 'x', LAUNCHD_PLIST: 'x' }));
 
 describe('keyfileModeNext quotes the key file path', () => {
   it('a path with spaces is one quoted shell word', async () => {
     const { keyfileModeNext } = await import('../../src/cli/agent-cmd');
-    expect(keyfileModeNext('/Users/a/Library/Application Support/k.json')).toBe("chmod 600 '/Users/a/Library/Application Support/k.json', then devnet-dvpn agent up --yes");
+    expect(keyfileModeNext('/Users/a/Library/Application Support/k.json', 'darwin')).toBe("chmod 600 '/Users/a/Library/Application Support/k.json', then devnet-dvpn agent up --yes");
   });
   it("a single quote inside the path is escaped", async () => {
     const { shellWord } = await import('../../src/cli/agent-cmd');
@@ -14,6 +13,6 @@ describe('keyfileModeNext quotes the key file path', () => {
   });
   it('negative control: a plain path stays unquoted', async () => {
     const { keyfileModeNext } = await import('../../src/cli/agent-cmd');
-    expect(keyfileModeNext('/Users/runner/mac-gha-1.json')).toBe('chmod 600 /Users/runner/mac-gha-1.json, then devnet-dvpn agent up --yes');
+    expect(keyfileModeNext('/Users/runner/mac-gha-1.json', 'darwin')).toBe('chmod 600 /Users/runner/mac-gha-1.json, then devnet-dvpn agent up --yes');
   });
 });

@@ -48,7 +48,7 @@ describe('an empty service config (Q0544, macOS)', () => {
     const rd = (f: string): string => fs.readFileSync(path.join('resources/scripts', f), 'utf8');
     expect(rd('_lib.sh')).toMatch(/atomic_write\(\) \{[\s\S]*cp -p "\$dst" "\$tmp"[\s\S]*mv -f "\$tmp" "\$dst"/);
     const apply = rd('apply-daemon-config.sh');
-    expect(apply).toContain('atomic_write "${SRC[$i]}" "${DST[$i]}"');
+    expect(apply).toContain('atomic_write "$snap/$i" "${DST[$i]}"');
     expect(apply).toContain('atomic_write "${DST[$i]}.bak" "${DST[$i]}"');
     expect(apply).not.toMatch(/cat "\$\{(SRC|DST)\[\$i\]\}(\.bak)?" > "\$\{DST/);
     expect(rd('migrate-daemon-config.sh')).toContain('atomic_write "$tmp" "$f"');

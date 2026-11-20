@@ -1,4 +1,6 @@
-// ─── afterPack: sign the .app with the project's STABLE self-signed identity (no notarization; owner decision) ───
+// ─── afterPack: sign the .app, ad hoc (the published CI build) or with the STABLE self-signed identity (no notarization; owner decision) ───
+// The published v0.3.0-rc8+ is built on GitHub macos-15 with DVPN_MAC_ADHOC=1 (no identity exists there); a build on
+// the guest can sign with the stable identity instead.
 // electron-builder signs nothing with `identity: null`. Apple Silicon refuses to run a Mach-O with no signature at
 // all, and editing the bundle (Info.plist, resources) breaks Electron's own linker signature, so the whole bundle is
 // re-signed here, inside-out: every loose Mach-O in Resources (dvpnd, v2ray, xray, hysteria2), then the frameworks and
@@ -13,7 +15,7 @@
 // Env: DVPN_MAC_SIGN_IDENTITY  the identity's SHA-1 (or name) in the signing keychain
 //      DVPN_MAC_SIGN_KEYCHAIN  path of the dedicated signing keychain
 //      DVPN_MAC_SIGN_KEYCHAIN_PASS_FILE  file holding that keychain's password (unlocked here, never logged)
-//      DVPN_MAC_ADHOC=1        deliberately sign ad hoc (dev builds only; a release must not)
+//      DVPN_MAC_ADHOC=1        sign ad hoc: the published CI release (.github/workflows/macos-rc8.yml) and dev builds
 'use strict';
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -40,6 +42,36 @@ function walk(dir, out = []) {
   return out;
 }
 
+// electron-builder's Arch enum (builder-util): only the two macOS arches we package
+const ARCH_NAME = { 1: 'x64', 3: 'arm64' };
+
+/** Remove build leftovers that are not this arch's code from app.asar.unpacked/node_modules, before signing:
+ * - node_gyp_bins/ (node-gyp's link to the BUILD machine's python3; electron-builder copies the binary in)
+ * - prebuilds/<os-arch>/ for any other platform or arch (node-gyp-build loads build/Release or darwin-<arch>)
+ * verify-release on v0.3.0-rc8 found 3 universal python3 copies + 2 darwin-x64-only .node files in the arm64 app.
+ * Returns the removed paths. Exported for tests. */
+function pruneForeign(unpackedNodeModules, arch) {
+  const keep = `darwin-${arch}`;
+  const removed = [];
+  if (!fs.existsSync(unpackedNodeModules)) return removed;
+  const visit = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!e.isDirectory()) continue;
+      const p = path.join(dir, e.name);
+      if (e.name === 'node_gyp_bins') { fs.rmSync(p, { recursive: true, force: true }); removed.push(p); continue; }
+      if (e.name === 'prebuilds') {
+        for (const pb of fs.readdirSync(p, { withFileTypes: true })) {
+          if (pb.isDirectory() && pb.name !== keep) { const q = path.join(p, pb.name); fs.rmSync(q, { recursive: true, force: true }); removed.push(q); }
+        }
+        continue;
+      }
+      visit(p);
+    }
+  };
+  visit(unpackedNodeModules);
+  return removed;
+}
+
 /** Which signer to use, from the environment. Exported for tests. */
 function signer(env = process.env) {
   const identity = (env.DVPN_MAC_SIGN_IDENTITY || '').trim();
@@ -49,7 +81,7 @@ function signer(env = process.env) {
     return { kind: 'identity', identity, keychain, passFile: (env.DVPN_MAC_SIGN_KEYCHAIN_PASS_FILE || '').trim() };
   }
   if (env.DVPN_MAC_ADHOC === '1') return { kind: 'adhoc' };
-  throw new Error('no Mac signing identity: set DVPN_MAC_SIGN_IDENTITY + DVPN_MAC_SIGN_KEYCHAIN (release), or DVPN_MAC_ADHOC=1 for a dev build. An ad-hoc build changes the app\'s Keychain identity on every update.');
+  throw new Error('no Mac signing identity: set DVPN_MAC_ADHOC=1 to sign ad hoc (as the published CI release does), or DVPN_MAC_SIGN_IDENTITY + DVPN_MAC_SIGN_KEYCHAIN for the stable identity. An ad-hoc build changes the app\'s Keychain identity on every update.');
 }
 
 /** codesign arguments for one target. Exported for tests. */
@@ -88,6 +120,10 @@ exports.default = async function macSign(context) {
   const s = signer();
   unlock(s);
   const app = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+  const arch = ARCH_NAME[context.arch];
+  if (!arch) throw new Error(`unexpected electron-builder arch ${context.arch} (want x64 or arm64)`);
+  const pruned = pruneForeign(path.join(app, 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules'), arch);
+  console.log(`  • pruned ${pruned.length} non-${arch} leftovers (node_gyp_bins, foreign prebuilds)`);
   const loose = walk(path.join(app, 'Contents', 'Resources', 'resources'));
   withSearchList(s, () => {
     for (const f of loose) execFileSync('/usr/bin/codesign', codesignArgs(s, f, false), { stdio: 'inherit' });
@@ -95,9 +131,10 @@ exports.default = async function macSign(context) {
   });
   execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { stdio: 'inherit' });
   const dr = execFileSync('/usr/bin/codesign', ['-d', '-r-', app], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  console.log(`  • ${s.kind === 'identity' ? 'signed with the stable identity' : 'AD-HOC signed (dev build)'} ${path.basename(app)} (${loose.length} bundled binaries)`);
+  console.log(`  • ${s.kind === 'identity' ? 'signed with the stable identity' : 'AD-HOC signed'} ${path.basename(app)} (${loose.length} bundled binaries)`);
   console.log(`  • designated requirement: ${dr.trim().split('\n').pop()}`);
 };
 exports.signer = signer;
+exports.pruneForeign = pruneForeign;
 exports.codesignArgs = codesignArgs;
 exports.parseSearchList = parseSearchList;

@@ -161,14 +161,15 @@ row_send_system_program() {
 
 row_send_sol_no_fees() {
   run wallet_show wallet show
-  # wallet show --json gives the owner's balance as ownerLamports; send = balance − 1000 lamports,
-  # so the send fits the balance but leaves no SOL for its fee (the refusal under test).
+  # wallet show --json gives the owner balance as ownerLamports. send = balance − MARGIN lamports (default 10000):
+  # send + its 5000-lamport fee fits, but leaves almost no SOL for later fees → the low-SOL refusal under test. (rc.8 run
+  # 44813895933: balance − 1000 hit insufficient-funds first, because send + fee exceeded the balance.)
   local lamports send
   lamports=$(echo "$OUT" | jq -r '.ownerLamports // empty' 2>/dev/null | grep -Eo '^[0-9]+$' | head -1)
-  if [ -z "$lamports" ] || [ "$lamports" -le 1000 ]; then
-    RC=1; record send_sol_no_fees DIFFERS "no ownerLamports above 1000 in wallet show: $(echo "$OUT" | head -c 200)"; return
+  if [ -z "$lamports" ] || [ "$lamports" -le "${SOL_NO_FEE_MARGIN:-10000}" ]; then
+    RC=1; record send_sol_no_fees DIFFERS "no ownerLamports above the margin in wallet show: $(echo "$OUT" | head -c 200)"; return
   fi
-  send=$(awk -v l="$lamports" 'BEGIN{printf "%.9f", (l-1000)/1e9}')
+  send=$(awk -v l="$lamports" -v m="${SOL_NO_FEE_MARGIN:-10000}" 'BEGIN{printf "%.9f", (l-m)/1e9}')
   run send_sol_no_fees wallet send --to "$SEND_TO" --sol "$send"
   expect send_sol_no_fees any 'fees|low-sol-after|allow-empty' "refused: leaves no fee SOL ($send of $lamports lamports)" "SOL send leaving no fees not refused ($send of $lamports lamports)"
 }
@@ -186,10 +187,104 @@ row_keyfile_mode() {
 }
 
 # ─── Cleanup: always ───
+# A fresh runner makes a NEW device and funds it (~0.044 SOL); its key dies with the runner. So after down +
+# restore-network: revoke the device's permission (owner signs), then sweep the device SOL back to the OWNER on the
+# runner itself (all but the 5000-lamport fee), signing with soltx.py + OpenSSL 3 like the hub's direct/lib.sh
+# sol_send. The device key is read with sudo into a 0600 temp file and rm -P'd; it is never printed or uploaded.
+# The deposits stay closing: the owner settles them later from any machine with `settle run --device <D> --yes`
+# (settlement.ts runSettlement signs with the OWNER key, no device key needed).
+HERE=$(cd "$(dirname "$0")" && pwd)
+SOL_RPC=${SOL_RPC:-https://api.devnet.solana.com}
+SWEEP_FEE=5000
+DEVICE_KEY_DIR=${DEVICE_KEY_DIR:-/Library/Application Support/sentinel-dvpn/c0/keys}
+sol_rpc() { curl -s -m 20 "$SOL_RPC" -H 'content-type: application/json' -d "$1"; }
+openssl3() {
+  local c
+  for c in "$(brew --prefix openssl@3 2>/dev/null)/bin/openssl" /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl openssl; do
+    [ -x "$c" ] || command -v "$c" >/dev/null 2>&1 || continue
+    "$c" version 2>/dev/null | grep -q '^OpenSSL 3' && { echo "$c"; return 0; }
+  done
+  return 1
+}
+
+cleanup_revoke() {
+  RC=0
+  local dev; dev=$(get device)
+  [ -n "$dev" ] || { RC=1; record cleanup_revoke DIFFERS "no device address was recorded; nothing revoked"; return; }
+  OUT=$("$CLI" device revoke --yes --json 2>"$EV/cleanup_revoke.err"); RC=$?
+  { echo "\$ $CLI device revoke --yes --json   (exit $RC)"; echo "$OUT"; cat "$EV/cleanup_revoke.err"; } >"$EV/cleanup_revoke.out"; rm -f "$EV/cleanup_revoke.err"
+  local sig; sig=$(echo "$OUT" | jq -r '.signature // .signatures[0]? // empty' 2>/dev/null)
+  if [ "$RC" = 0 ]; then record cleanup_revoke PASS "device $dev permission removed${sig:+, sig $sig}"
+  else record cleanup_revoke DIFFERS "device revoke failed: $(echo "$OUT" | head -c 300)"; fi
+}
+
+cleanup_sweep() {
+  RC=0
+  local dev owner work key bh lamports amount pem pub chk tx res sig st i ossl f kp
+  dev=$(get device); owner=$(get owner)
+  { [ -n "$dev" ] && [ -n "$owner" ]; } || { RC=1; record cleanup_sweep DIFFERS "device/owner address unknown; nothing swept"; return; }
+  ossl=$(openssl3) || { RC=1; record cleanup_sweep DIFFERS "no OpenSSL 3 on the runner (LibreSSL cannot sign ed25519 raw); device $dev SOL left"; return; }
+  lamports=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"$dev\",{\"commitment\":\"confirmed\"}]}" | jq -r '.result.value // empty')
+  [ -n "$lamports" ] || { RC=1; record cleanup_sweep DIFFERS "could not read device $dev balance"; return; }
+  [ "$lamports" -gt "$SWEEP_FEE" ] || { record cleanup_sweep PASS "device $dev holds $lamports lamports: nothing to sweep"; return; }
+  amount=$((lamports - SWEEP_FEE))
+  work=$(umask 077; mktemp -d "${TMPDIR:-/tmp}/sweep.XXXXXX")
+  key="$work/device.json"
+  # find the device key file whose address is the device (never print a key)
+  # the key folder is root-only: list it with sudo (a glob as the runner user would see nothing)
+  while IFS= read -r -d '' f; do
+    (umask 077; sudo cat "$f" >"$key") && chmod 600 "$key"
+    kp=$(python3 -I "$HERE/soltx.py" pubkey "$key" 2>/dev/null || true)
+    [ "$kp" = "$dev" ] && break
+    rm -P "$key" 2>/dev/null || rm -f "$key"
+  done < <(sudo find "$DEVICE_KEY_DIR" -maxdepth 2 -type f -name '*.json' -print0 2>/dev/null)
+  if [ ! -f "$key" ]; then rm -rf "$work"; RC=1; record cleanup_sweep DIFFERS "no key under $DEVICE_KEY_DIR is device $dev; $lamports lamports left"; return; fi
+  bh=$(sol_rpc '{"jsonrpc":"2.0","id":1,"method":"getLatestBlockhash","params":[{"commitment":"confirmed"}]}' | jq -r '.result.value.blockhash // empty')
+  pem="$work/device.pem"
+  if [ -z "$bh" ] || ! (umask 077; python3 -I "$HERE/soltx.py" "$key" "$dev" "$bh" "$work" "$pem" sol "$owner" "$amount" >/dev/null 2>"$work/build.err"); then
+    rm -P "$key" "$pem" 2>/dev/null; rm -rf "$work"; RC=1; record cleanup_sweep DIFFERS "could not build the sweep (blockhash '${bh:-none}')"; return
+  fi
+  rm -P "$key" 2>/dev/null || rm -f "$key"
+  # W30: decode the built message and compare it with the intended transfer before signing
+  if ! chk=$(python3 -I "$HERE/soltx.py" check "$work/msg.bin" "$dev" sol "$owner" "$amount" 2>&1); then
+    rm -P "$pem" 2>/dev/null; rm -rf "$work"; RC=1; record cleanup_sweep DIFFERS "built sweep differs from the intent: $chk; nothing signed"; return
+  fi
+  pub=$("$ossl" pkey -in "$pem" -pubout -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n')
+  if [ "$pub" != "$(cat "$work/pub.hex")" ]; then
+    rm -P "$pem" 2>/dev/null; rm -rf "$work"; RC=1; record cleanup_sweep DIFFERS "openssl derived another public key; not signing"; return
+  fi
+  "$ossl" pkeyutl -sign -inkey "$pem" -rawin -in "$work/msg.bin" -out "$work/sig.bin"
+  rm -P "$pem" 2>/dev/null || rm -f "$pem"
+  tx=$( (printf '\001'; cat "$work/sig.bin" "$work/msg.bin") | base64 | tr -d '\n')
+  rm -rf "$work"
+  res=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"sendTransaction\",\"params\":[\"$tx\",{\"encoding\":\"base64\",\"preflightCommitment\":\"confirmed\"}]}")
+  sig=$(echo "$res" | jq -r '.result // empty')
+  [ -n "$sig" ] || { RC=1; record cleanup_sweep DIFFERS "sendTransaction refused: $(echo "$res" | jq -c '.error // .' | cut -c1-300)"; return; }
+  st=""; i=0
+  while [ $i -lt 30 ]; do
+    st=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getSignatureStatuses\",\"params\":[[\"$sig\"]]}" | jq -r '.result.value[0].confirmationStatus // empty')
+    case $st in confirmed|finalized) break ;; esac
+    sleep 2; i=$((i+1))
+  done
+  case $st in
+    confirmed|finalized) record cleanup_sweep PASS "swept $amount lamports device $dev → owner $owner, sig $sig" ;;
+    *) RC=1; record cleanup_sweep DIFFERS "sweep sent but not confirmed in 60 s, sig $sig" ;;
+  esac
+}
+
 cleanup() {
   chmod 600 "$DVPN_KEYFILE" 2>/dev/null || echo "cleanup: chmod 600 on the key failed" >&2
   "$CLI" agent down --yes --json >"$EV/cleanup_down.out" 2>&1 || echo "cleanup: agent down exit $?" >&2
   "$CLI" daemon restore-network --json >"$EV/cleanup_restore.out" 2>&1 || echo "cleanup: restore-network exit $?" >&2
+  # remember device + owner while the wallet is still readable
+  local ws; ws=$("$CLI" wallet show --json 2>/dev/null || true)
+  [ -n "$(get device)" ] || put device "$(echo "$ws" | jq -r '.device // empty' 2>/dev/null)"
+  [ -n "$(get owner)" ] || put owner "$(echo "$ws" | jq -r '.owner // empty' 2>/dev/null)"
+  if [ "${SKIP_DEVICE_CLEANUP:-0}" != 1 ]; then
+    cleanup_revoke
+    sleep "$TX_GAP"
+    cleanup_sweep
+  fi
   write_result
 }
 

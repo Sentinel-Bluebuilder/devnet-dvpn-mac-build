@@ -21,16 +21,22 @@ for s in v2ray xray; do
   fi
 done
 N=${#SRC[@]}
+# AC-MAC-1 P2-2: the staged folder is the user's, so a file checked here could be swapped for a link before it
+# is read (the service stop below takes up to 30 s). Snapshot each one ONCE with `cp -RP` (a link is copied as
+# a link) into a root-owned folder, refuse a link, and read only the snapshot from here on.
+snap="$(mktemp -d "$HOME_DIR/.staged.XXXXXX")" || die 'could not make a folder for the staged settings'
+trap 'rm -rf -- "$snap"' EXIT
 for ((i = 0; i < N; i++)); do
-  { [ -f "${SRC[$i]}" ] && [ ! -L "${SRC[$i]}" ]; } || die "missing staged file ${SRC[$i]}"
   [ -f "${DST[$i]}" ] || die "daemon home has no ${DST[$i]}"
-  [ "$(stat -f %z "${SRC[$i]}")" -le 65536 ] || die "staged file too large: ${SRC[$i]}"
+  cp -RP -- "${SRC[$i]}" "$snap/$i" 2>/dev/null || die "missing staged file ${SRC[$i]}"
+  if [ -L "$snap/$i" ] || [ ! -f "$snap/$i" ]; then die "staged file is not a plain file: ${SRC[$i]}"; fi
+  [ "$(stat -f %z "$snap/$i")" -le 65536 ] || die "staged file too large: ${SRC[$i]}"
 done
 for ((i = 0; i < N; i++)); do cp -p "${DST[$i]}" "${DST[$i]}.bak"; done
 has_svc=0; [ -f "$PLIST" ] && has_svc=1
 [ $has_svc = 1 ] && svc_stop
 # atomic_write (Q0544) keeps owner, mode and ACL (root:sentinel-dvpn + the user's read ACE) and never leaves a cut file
-for ((i = 0; i < N; i++)); do atomic_write "${SRC[$i]}" "${DST[$i]}" || die "could not write ${DST[$i]}"; done
+for ((i = 0; i < N; i++)); do atomic_write "$snap/$i" "${DST[$i]}" || die "could not write ${DST[$i]}"; done
 if [ $has_svc = 1 ]; then
   ok=0
   if svc_start; then

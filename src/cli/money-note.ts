@@ -23,7 +23,7 @@ const NONE: readonly string[] = [
   // R2 (#38 rc.7): commands that sign nothing on failure (device, daemon, nodes, plans, settings, test, key store)
   'device-home-gone', 'no-plan', 'driver-repair-failed', 'no-device-key', 'migrate-failed', 'device-not-ready',
   'install-failed', 'daemon-settings-empty', 'daemon-settings-unreadable', 'dns-no-answer', 'uninstall-failed', 'checks-off', 'test-plan-failed',
-  'no-test-run', 'keystore-unavailable', 'keyfile-read-only',
+  'no-test-run', 'keystore-unavailable', 'keyfile-read-only', 'keyfile-unreadable', 'needs-admin', 'device-key-unreadable', 'setting-rejected', 'keyfile-lock-failed', // AUD-2 M12; WIN-W1
   'not-confirmed', 'no-wallet', 'keyfile-missing', 'keyfile-mode', 'wallet-switch-needed', 'clock-skew', 'no-device', 'device-permission',
   'plan-limit', 'busy', 'test-running', 'unsupported', 'daemon-missing', 'daemon-relogin', 'daemon-restarting',
   'daemon-unavailable', 'network-mismatch', 'kill-switch-held', 'switch-reconnecting',
@@ -31,11 +31,13 @@ const NONE: readonly string[] = [
   'price-changed', 'deposit-unusable', 'deposits-unread',
   // agent-cmd's own checks and the shared service copy
   'no-nodes', 'not-funded', 'no-subscription', 'service-down', 'service-not-ready',
+  // L-RPC (#38 rc.8): the service's own preflight to its RPC failed ("waiting for network: preflight failed: rpc").
+  'waiting-for-network',
 ];
 
 const OPEN: readonly string[] = [
   // after the start was asked of the service
-  'cancelled', 'switch-offline', 'waiting-for-network', 'ticket-other-owner', 'approval-revoked', 'service-stopped-connecting',
+  'cancelled', 'switch-offline', 'ticket-other-owner', 'approval-revoked', 'service-stopped-connecting',
   'node-identity', 'node-ledger', 'node-price', 'node-error', 'kill-switch-failed',
   'tunnel-failed', 'tunnel-dead', 'tunnel-mtu', 'tunnel-closing', 'port-in-use', 'dns-apply', 'protocol-missing',
   'deposit-pending', 'rpc-network', 'rpc-timeout', 'rpc-quota', 'timeout', 'chain-encoding',

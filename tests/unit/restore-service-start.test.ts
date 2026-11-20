@@ -10,6 +10,7 @@ const st = vi.hoisted(() => ({
   reachable: [] as boolean[],
   starts: 0,
   sweeps: 0, // RC9 PF-DEAD: root sweeps run while the daemon is down
+  stops: 0, // RC9 PF-DEAD-2: StopSession calls (the release of a kill switch the respawned daemon re-applied)
   state: { session: null as unknown, conn: { phase: 'idle' } as Record<string, unknown>, lastConnectError: null as unknown },
 }));
 vi.mock('../../src/main/app-state', () => ({
@@ -21,7 +22,7 @@ vi.mock('../../src/main/app-state', () => ({
 vi.mock('../../src/main/daemon/manager', () => ({
   daemon: () => ({
     listSessions: async () => { if (!st.up) throw new Error('daemon down'); return []; },
-    stopSession: async () => { throw Object.assign(new Error('none'), { kind: 'not-found' }); },
+    stopSession: async () => { st.stops += 1; throw Object.assign(new Error('none'), { kind: 'not-found' }); },
   }),
   daemonInfo: () => ({ reachable: false }),
   startServiceIfStopped: async () => { st.starts += 1; if (st.svc === 'started') st.up = true; return st.svc; },
@@ -49,7 +50,7 @@ vi.mock('../../src/main/services/net-settle', () => ({ waitForDirectPath: async 
 
 const { restoreNetwork } = await import('../../src/main/services/connection');
 
-beforeEach(() => { st.state = { session: null, conn: { phase: 'idle' }, lastConnectError: null }; st.reachable = []; st.starts = 0; st.sweeps = 0; st.up = false; });
+beforeEach(() => { st.state = { session: null, conn: { phase: 'idle' }, lastConnectError: null }; st.reachable = []; st.starts = 0; st.sweeps = 0; st.stops = 0; st.up = false; });
 
 describe('restore network when the VPN service is down', () => {
   it('stopped service: started, waited for, restore runs again and succeeds', async () => {
@@ -97,6 +98,27 @@ describe('restore network right after the daemon was killed (RC9 PF-DEAD)', () =
   });
   it('negative control: running but it never answers: the restart text, no loop', async () => {
     st.svc = 'running'; st.reachable = [false];
+    const r = await restoreNetwork();
+    expect(r.code).toBe('daemon-unavailable');
+    expect(st.starts).toBe(1);
+  });
+});
+
+// ─── RC9 PF-DEAD-2 (#33 live run 44813895933): a normal user's kickstart is refused ('no-right'); launchd KeepAlive
+// brings the daemon back on its own and it re-applies the kill switch it held. The restore must wait, run again and
+// release it (StopSession), as the second restore did live. Before this fix it gave up at once (block stayed).
+describe('restore network: no right to kickstart, but the service manager restarts the daemon (RC9 PF-DEAD-2)', () => {
+  it.runIf(process.platform !== 'win32')('no-right + the daemon comes back: waits, runs again, releases the held kill switch, ok', async () => {
+    st.svc = 'no-right'; st.reachable = [true];
+    const p = restoreNetwork();
+    st.up = true; // KeepAlive respawned it while the restore waited
+    const r = await p;
+    expect(r.ok).toBe(true);
+    expect(st.sweeps).toBe(1);
+    expect(st.stops).toBeGreaterThanOrEqual(1);
+  });
+  it('negative control: no-right and it never comes back: the restart text, no loop', async () => {
+    st.svc = 'no-right'; st.reachable = [false];
     const r = await restoreNetwork();
     expect(r.code).toBe('daemon-unavailable');
     expect(st.starts).toBe(1);

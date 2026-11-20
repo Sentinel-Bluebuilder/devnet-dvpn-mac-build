@@ -20,6 +20,7 @@ const st = vi.hoisted(() => ({
   pending: false,
   installOk: true,
   setupFail: null as unknown,
+  allowances: [] as string[], // W91b: what the first-connect setup signed
   calls: [] as string[],
   snap: {} as Record<string, unknown>,
 }));
@@ -38,8 +39,9 @@ vi.mock('../../src/core/app/device-setup', async (orig) => {
   const real = await orig<typeof import('../../src/core/app/device-setup')>();
   return {
     ...real,
-    runDeviceSetup: async () => {
+    runDeviceSetup: async (_s: unknown, _d: unknown, allowance: string) => {
       st.calls.push('setup');
+      st.allowances.push(allowance);
       if (st.setupFail) throw st.setupFail;
       st.wallet = { ...st.wallet, grant: { allowance: '50000000', rentPayer: OWNER, permissions: PERMS }, delegated: '50000000', needsPermission: false };
       return { signature: 'sig-setup', plan: {} };
@@ -139,6 +141,21 @@ describe('ensureDevicePermission (runs inside connect)', () => {
     st.setupFail = null;
     st.calls = [];
     st.snap = {};
+    st.allowances = [];
+  });
+  it('W91b: a fresh wallet holding 20 tDVPN with Settings at 50: the first-connect limit is 20 (the wallet), as device setup', async () => {
+    expect(await ensureDevicePermission()).toBeNull();
+    expect(st.allowances).toEqual(['20000000']);
+  });
+  it('W91b negative control: a wallet holding more than the Settings limit: the Settings limit', async () => {
+    st.wallet = fresh({ ownerTdvpn: '90000000' });
+    expect(await ensureDevicePermission()).toBeNull();
+    expect(st.allowances).toEqual(['50000000']);
+  });
+  it('W91b negative control: a wallet holding 0: the Settings limit (never a 0 limit)', async () => {
+    st.wallet = fresh({ ownerTdvpn: '0' });
+    expect(await ensureDevicePermission()).toBeNull();
+    expect(st.allowances).toEqual(['50000000']);
   });
   it('fresh wallet: signs the permission and lets the connect go on', async () => {
     expect(await ensureDevicePermission()).toBeNull();

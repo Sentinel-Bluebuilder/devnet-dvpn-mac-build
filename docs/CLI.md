@@ -54,8 +54,8 @@ Generated from `src/cli/catalogue.ts` — edit that file, then `npm run docs:cli
 | Command | What it does | Asks for `--yes` |
 |---|---|---|
 | `device show` | Device key, spending limit, token permission, device SOL. |  |
-| `device plan [--allowance N] [--force]` | What setup would sign (no transaction). |  |
-| `device setup [--allowance N] [--force] --yes` | Approve tokens, give the device a spending permission (grant), send it fee SOL. | yes |
+| `device plan [--allowance N] [--max-price P] [--force]` | What setup would sign (no transaction). |  |
+| `device setup [--allowance N] [--max-price P] [--force] --yes` | Approve tokens, give the device a spending permission (grant), send it fee SOL. | yes |
 | `device switch --yes` | Set this computer up for the loaded wallet instead of the one it was set up for (that wallet keeps its deposits, refundable with its own key). | yes |
 | `device discard-setup --yes` | Remove a half-finished device setup or wallet switch (a set-up device is never touched). | yes |
 | `device register [pubkey] [--home <dir>]` | Adopt an existing service device key. Pass its address (pubkey) when the key folder is admin-only: that form needs no administrator. |  |
@@ -92,7 +92,7 @@ Generated from `src/cli/catalogue.ts` — edit that file, then `npm run docs:cli
 
 | Command | What it does | Asks for `--yes` |
 |---|---|---|
-| `agent up [--protocol any\|wireguard\|amneziawg\|openvpn\|v2ray\|xray\|hysteria2] [--country CC] [--node N] [--basis per_gb\|per_hour] [--units N] [--plan <subscription>] [--max-price N] [--raise-limit] --yes` | For AI agents: pick the best online server that matches, pay a deposit (or use a plan) and connect. One JSON line with the exit IP, SOCKS endpoint and next step. Already connected: answers the live session. A deposit above the spending limit of this computer is refused until you add --raise-limit. | yes |
+| `agent up [--protocol any\|wireguard\|amneziawg\|openvpn\|v2ray\|xray\|hysteria2] [--country CC] [--node N] [--basis per_gb\|per_hour] [--units N] [--plan <subscription>] [--max-price N] [--raise-limit \| --raise-limit-to N] --yes` | For AI agents: pick the best online server that matches, pay a deposit (or use a plan) and connect. One JSON line with the exit IP, SOCKS endpoint and next step. Already connected: answers the live session. A deposit above the spending limit of this computer is refused until you add --raise-limit. | yes |
 | `agent down --yes` | For AI agents: disconnect, close per-hour deposits at once (they bill until closed) and start the refund of per-GB ones. Says what is refundable and when. | yes |
 | `agent status` | For AI agents: wallet, session and exit IP as one JSON line with the next step (e.g. what to fund). |  |
 | `connect <node> [--basis per_gb\|per_hour] [--units N] [--plan <subscription>] [--switch] --yes` | Pay a deposit (or use a plan) and connect. | yes |

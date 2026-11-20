@@ -98,12 +98,13 @@ export async function planDeviceSetup(owner: string, device: string, allowance: 
   const ixs: TransactionInstruction[] = [];
   const steps: string[] = [];
   const want = BigInt(allowance);
-  const currentAllowance = BigInt(st.grant?.allowance ?? '0');
-  // Delegate: make sure the shared amount covers this device's new room on top of what others had.
+  // LIM-2 (#38 rc.9, T-A 15 least privilege): the shared approval is SET to the limit, never added. It was "what is
+  // still approved + the new room", so each raise stacked on what deposits had not used yet (delegated 150.005 →
+  // 150.010 → 299.997 on one device). It is approved only when below the limit, and never lowered here (another
+  // device of this wallet may rely on it; `device revoke` is the way down).
   let approveTo: string | null = null;
-  const extra = want > currentAllowance ? want - currentAllowance : 0n;
-  if (extra > 0n || BigInt(st.delegated) === 0n) {
-    approveTo = (BigInt(st.delegated) + (extra > 0n ? extra : want)).toString();
+  if (BigInt(st.delegated) < want) {
+    approveTo = want.toString();
     // A new wallet has no tDVPN token account, and approving on a missing account fails
     // (2026-11-11: "[object Object]" on a fresh wallet). Create it first, in the same transaction.
     if (st.ownerAta === false) {

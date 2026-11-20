@@ -18,13 +18,13 @@ describe('P-N: no-device-key next', () => {
     const { noDeviceKeyNext } = await import('../../src/cli/cli-fail');
     expect(noDeviceKeyNext(true)).toBe('devnet-dvpn agent up --yes');
   });
-  it('no service: daemon install --yes', async () => {
+  it('AUD-1: no service: daemon init --yes, then device setup --yes (install refuses an unset-up device)', async () => {
     const { noDeviceKeyNext } = await import('../../src/cli/cli-fail');
-    expect(noDeviceKeyNext(false)).toBe('devnet-dvpn daemon install --yes');
+    expect(noDeviceKeyNext(false)).toBe('devnet-dvpn daemon init --yes, then devnet-dvpn device setup --yes');
   });
   it('negative control: neither answer is two commands', async () => {
     const { noDeviceKeyNext } = await import('../../src/cli/cli-fail');
-    for (const r of [true, false]) expect(noDeviceKeyNext(r)).not.toMatch(/, then |daemon init|device setup/);
+    expect(noDeviceKeyNext(true)).not.toMatch(/, then |daemon init|device setup/); // AUD-1: the no-service next is init, then setup
   });
   it('device setup uses it, coded, with the service state', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../src/cli/commands.ts'), 'utf8');

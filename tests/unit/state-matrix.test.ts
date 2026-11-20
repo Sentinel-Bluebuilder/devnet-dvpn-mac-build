@@ -235,7 +235,7 @@ describe('matrix 3: service and build', () => {
 describe('matrix 4: limits and price', () => {
   it('spending limit below the deposit: spending-limit exit 4 none, the line with --raise-limit --yes', async () => {
     st.allowanceTdvpn = '50'; st.wallet = { ...st.wallet!, grant: { allowance: '1000', rentPayer: 'Dev1111', permissions: 7 } };
-    await failCell('agent up --yes', { code: 'spending-limit', exit: 4, money: 'none', next: /^devnet-dvpn agent up --node NodeB .*--raise-limit --yes/ });
+    await failCell('agent up --yes', { code: 'spending-limit', exit: 4, money: 'none', next: /^devnet-dvpn device setup --allowance [\d.]+ --yes, then devnet-dvpn agent up --node NodeB .*--yes$/ }); // LIM-1 (rc.9)
   });
   it('gap 2: limit below the deposit: status does not send the agent into that refusal', async () => {
     st.allowanceTdvpn = '50'; st.wallet = { ...st.wallet!, grant: { allowance: '1000', rentPayer: 'Dev1111', permissions: 7 } };
@@ -328,7 +328,7 @@ describe('matrix 7: network, clock, concurrency', () => {
   });
   it('wrong clock: clock-skew names the minutes', async () => {
     connectFails('clock-skew', 'The clock is off by about 7 min.');
-    await failCell('agent up --yes', { code: 'clock-skew', exit: 4, money: 'none', next: /^(sudo timedatectl set-ntp true && \(sudo chronyc makestep 2>\/dev\/null \|\| true\)|sudo sntp -sS time\.apple\.com|w32tm \/resync \(from an elevated shell\)), then devnet-dvpn agent up --yes$/ }); // C-CLOCK (rc.8)
+    await failCell('agent up --yes', { code: 'clock-skew', exit: 4, money: 'none', next: /^(sudo timedatectl set-ntp true && \(sudo chronyc makestep 2>\/dev\/null \|\| true\)|sudo sntp -sS time\.apple\.com|Start-Service w32time; w32tm \/resync \/force \(elevated PowerShell\)|w32tm \/resync \(from an elevated shell\)), then devnet-dvpn agent up --yes$/ }); // C-CLOCK (rc.8)
   });
   it('two agents at once: busy, next again in a few seconds', async () => {
     connectFails('busy');
@@ -338,7 +338,7 @@ describe('matrix 7: network, clock, concurrency', () => {
 
 // ─── Every next is runnable or a named human step ───
 /** The steps only a person (or the agent's own tools) can do; each is named, never a vague "fix it". */
-const HUMAN = [/^send /, /^set this computer's clock/, /^sudo timedatectl set-ntp true && \(sudo chronyc makestep /, /^sudo sntp -sS time\.apple\.com, then /, /^w32tm \/resync /, /^load the key file/, /^restore the key file/, /^read "error"/, /^chmod 600 /,
+const HUMAN = [/^send /, /^set this computer's clock/, /^sudo timedatectl set-ntp true && \(sudo chronyc makestep /, /^sudo sntp -sS time\.apple\.com, then /, /^w32tm \/resync /, /^Start-Service w32time; w32tm \/resync \/force /, /^load the key file/, /^restore the key file/, /^read "error"/, /^chmod 600 /, /^icacls "/,
   /^a deposit of /]; // a deposit of …: openDepositNext names two commands (pick another node, or agent down)
 
 describe('every next is a command or a named human step', () => {

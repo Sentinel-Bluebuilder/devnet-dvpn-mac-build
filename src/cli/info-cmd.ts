@@ -72,7 +72,7 @@ export const rpcCmd: Cmd = async (a, o) => {
     const urls = a._.slice(2);
     if (!urls.length) throw new UsageError('rpc set <url> [url...]');
     const bad = urls.filter((u) => !isValidRpcUrl(u));
-    if (bad.length) throw new Error(`Not accepted (https only; http only for 127.0.0.1): ${bad.map(redactUrls).join(', ')}`);
+    if (bad.length) throw new UsageError(`Not accepted (https only; http only for 127.0.0.1): ${bad.map(redactUrls).join(', ')}. Nothing was changed.`); // AUD-2 M7
     const s = updateSettings({ rpcUrls: urls });
     const pool = s.rpcUrls.map(redactUrls); // never echo an API key (#33 fuzz)
     o.print(`RPC pool: ${pool.join(', ')}`, pool);
@@ -80,7 +80,7 @@ export const rpcCmd: Cmd = async (a, o) => {
   }
   const s = await getRpcState();
   const head = s.slot == null
-    ? `No RPC endpoint is answering (tried ${s.serving}). Check your internet connection, or add another endpoint: rpc set <url>.`
+    ? `No RPC endpoint is answering (tried ${s.serving}). Check your internet connection, or set the endpoints: ${CLI_NAME} rpc set <url> [<url>...] (this replaces the whole list).` // AUD-2 M6
     : `Serving ${s.serving}  slot ${s.slot}  ${s.latencyMs ?? '?'} ms`;
   o.print(`${head}${s.publicOnly ? '\nWarning: only the public devnet RPC is configured; it rate-limits real use.' : ''}`, s);
 };
@@ -100,7 +100,9 @@ export const settingsCmd: Cmd = async (a, o) => {
     // The allow-list drops invalid values without a word; say which ones did not take.
     const shown = (k: string): string => JSON.stringify(next[k as keyof typeof next]);
     const rejected = Object.keys(patch).filter((k) => shown(k) !== JSON.stringify(patch[k]));
-    if (rejected.length) throw new Error(`The value for ${rejected.join(', ')} is not allowed, so it was left unchanged.`);
+    const saved = Object.keys(patch).filter((k) => !rejected.includes(k));
+    // AUD-2 M8: the other keys of the same line WERE saved: say so (a code, and the read that shows them).
+    if (rejected.length) throw cliErr('setting-rejected', `${CLI_NAME} settings get`, `The value for ${rejected.join(', ')} is not allowed, so it was left unchanged.${saved.length ? ` Saved: ${saved.map((k) => `${k} = ${shown(k)}`).join(', ')}.` : ''}`);
     // The app applies startWithOs when it runs; an OS that can write it from the CLI does so now (#33).
     // DVPN-LINUX rc.2: the log-in item follows the app's rule (on while the kill switch is on), from the CLI too.
     const ksHolds = 'startWithOs' in patch && !next.startWithOs && loginItemWanted(false, getDaemonSettings().settings.killSwitch);

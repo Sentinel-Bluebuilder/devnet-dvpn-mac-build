@@ -4,7 +4,7 @@
 # awg + awg-quick + amneziawg-go (AmneziaWG), openvpn, and bash 4+ (wg-quick needs it; macOS ships
 # 3.2). pf (kill switch) and networksetup (DNS) are part of macOS. V2Ray / Xray / Hysteria2 ship
 # inside the app.
-# The service runs only ROOT-OWNED copies in /usr/local/lib/devnet-dvpn/tools: Homebrew's prefix is
+# The service runs only ROOT-OWNED copies in /Library/devnet-dvpn/tools: Homebrew's prefix is
 # writable by the user, so root never executes a tool from there. wg-quick / awg-quick get their
 # interpreter line pointed at our copied bash.
 #   --CheckOnly 1  : no root, installs nothing, writes the report (exit 2 = something missing)
@@ -180,6 +180,9 @@ LOG="$OUT/install-deps.log"
 # ─── User phase: Homebrew + AmneziaWG build as the Mac user, no time limit ───
 if [ "$USER_PHASE" = 1 ]; then
   [ "$(id -u)" != 0 ] || die 'the user phase runs as the Mac user (Homebrew refuses root)'
+  # AC-MAC-1 C6: the app bundles every tool; then nothing is built or fetched here and the root step installs the
+  # bundle. Without this a Mac with no Homebrew (most of them) could not run Repair drivers at all.
+  if bundle_complete; then echo 'PROGRESS Every VPN tool ships with the app: no Homebrew needed'; exit 0; fi
   [ -n "$BREW" ] || die "Homebrew is not installed. $(brew_hint)"
   pkgs=()
   for f in wireguard-tools wireguard-go openvpn bash go; do

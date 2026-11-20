@@ -12,7 +12,7 @@ also a command (`devnet-dvpn …`).
 ## Install
 
 Open `Devnet-dVPN-<version>-<arch>.dmg` and drag the app to Applications. The app is
-self-signed, not notarized: the first time, right-click it → Open. Its first run sets up the device
+ad hoc signed (v0.3.0-rc8), not notarized: the first time, right-click it → Open. Its first run sets up the device
 and installs the VPN service (one administrator prompt); after that `devnet-dvpn help` works
 in any terminal. To remove it: Diagnostics → Remove the VPN service (or
 `devnet-dvpn daemon uninstall --yes`), then drag the app to the Trash. Scripts and AI agents

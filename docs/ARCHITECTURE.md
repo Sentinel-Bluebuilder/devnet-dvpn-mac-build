@@ -15,7 +15,7 @@ in [`MAC-PORT.md`](MAC-PORT.md). Feature IDs (F*.*) refer to [`FEATURE-PLAN.md`]
 │     │                                                                        │
 │  main process                                                                │
 │     ├─ scheduler        one owner for every poll / stream (F5)               │
-│     ├─ daemon client    grpc-js → unix:/var/db/dvpnd/client/daemon.sock      │
+│     ├─ daemon client    grpc-js → unix:/Library/Application Support/sentinel-dvpn/c0/daemon.sock      │
 │     ├─ chain            RPC pool, decoders, tx builders, signer (F4, D2)     │
 │     ├─ wallet           owner key in safeStorage = login Keychain (F2, D10)  │
 │     ├─ nodes / plans    discovery, signed-metadata probe, TLS pin (F6, F10)  │
@@ -23,7 +23,7 @@ in [`MAC-PORT.md`](MAC-PORT.md). Feature IDs (F*.*) refer to [`FEATURE-PLAN.md`]
 │     ├─ system           settings, root helper, proxy, tray (F16, F18, F21)   │
 │     └─ node-test        isolated service, own state (F20)                    │
 └──────────────────────────────────────────────────────────────────────────────┘
-      │ unix socket 0660 (group dvpn + ACL)      │ HTTPS             │ HTTPS (pinned)
+      │ unix socket 0660 (group sentinel-dvpn + ACL)      │ HTTPS             │ HTTPS (pinned)
       ▼                                          ▼                   ▼
  dvpnd (client role, root LaunchDaemon)      Solana devnet RPC    nodes / providers
  tunnel (utun) · pf kill switch · DNS ·      (user-configurable    (any listed node,
@@ -40,14 +40,14 @@ in [`MAC-PORT.md`](MAC-PORT.md). Feature IDs (F*.*) refer to [`FEATURE-PLAN.md`]
   - over SSH / CI / the test rig: `sudo -n`;
   - already root: directly.
   Only validated file paths and tokens go on the command line, never config text (M5.3 #8).
-  After setup the helper runs from the root-owned copy in `/usr/local/lib/devnet-dvpn/scripts`
+  After setup the helper runs from the root-owned copy in `/Library/devnet-dvpn/scripts`
   (the app bundle may be writable by the user); setup itself runs from the bundle so a new app
   version installs its new scripts.
-- **The service.** LaunchDaemon `/Library/LaunchDaemons/network.sentinel.devnet-dvpn.dvpnd.plist`
+- **The service.** LaunchDaemon `/Library/LaunchDaemons/co.sentinel.sentinel-dvpnd.c0.plist`
   (KeepAlive; `launchctl bootstrap | kickstart | bootout system`). Binaries are copied to the
-  root-owned `/usr/local/lib/devnet-dvpn` with the quarantine attribute removed.
-- **Network control lives in dvpnd.** Kill switch = dvpnd's pf anchor `dvpnd`, attached as the
-  first rule of the main ruleset for both directions (`anchor "dvpnd" quick all`); DNS through
+  root-owned `/Library/devnet-dvpn` with the quarantine attribute removed.
+- **Network control lives in dvpnd.** Kill switch = dvpnd's pf anchor `sentinel-dvpn-c0`, attached as the
+  first rule of the main ruleset for both directions (`anchor "sentinel-dvpn-c0" quick all`); DNS through
   `networksetup` (or `none`). The app itself only sets the per-service SOCKS proxy
   (`networksetup -setsocksfirewallproxy`) and restores the user's own values.
 - **Two keys.** Owner key (the user's wallet) signs grants, subscriptions, settlement and
@@ -116,6 +116,6 @@ renderer; they serialise per owner key so two writes never race a blockhash (PM 
 | app settings, favourites, history, settlement queue, node cache | `~/Library/Application Support/Devnet dVPN/*.json` |
 | node-test runs | `~/Library/Application Support/Devnet dVPN/node-tests/` |
 | logs | `~/Library/Application Support/Devnet dVPN/logs/` (rotating, redacted); service log `/Library/Logs/DevnetDVPN/dvpnd.log` |
-| daemon config, device key, daemon db | `/var/db/dvpnd/client/` (daemon-owned: root:dvpn 0750 + an ACL for the setup user; `keys/` closed to the user) |
+| daemon config, device key, daemon db | `/Library/Application Support/sentinel-dvpn/c0/` (daemon-owned: root:sentinel-dvpn 0750 + an ACL for the setup user; `keys/` closed to the user) |
 
 Every persisted model round-trips through JSON (bigints as strings) — tested (F13.6).

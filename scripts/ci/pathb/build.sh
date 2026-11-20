@@ -88,7 +88,7 @@ while read -r sum name; do
   fi
 done < "$DIST/SHA256SUMS"
 
-NATIVE=$(case $(uname -m) in x86_64) echo amd64 ;; aarch64|arm64) echo arm64 ;; *) echo none ;; esac)
+case $(uname -m) in x86_64) NATIVE=amd64 ;; aarch64|arm64) NATIVE=arm64 ;; *) NATIVE=none ;; esac
 [ "$OS" = Linux ] || NATIVE=none   # VERIFY_ONLY on another OS: Linux files cannot run or be installed here
 if [ -x "$DIST/sentinel-dvpn-linux-$NATIVE" ]; then "$DIST/sentinel-dvpn-linux-$NATIVE" version >&2; fi
 

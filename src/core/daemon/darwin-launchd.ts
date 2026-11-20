@@ -24,12 +24,6 @@ export function launchdStartNext(s: LaunchdState, label: string, plist: string):
   return s.loaded ? `sudo launchctl kickstart -k system/${label}` : `sudo launchctl bootstrap system ${plist}`;
 }
 
-/** RC9 PF-DEAD (#33 run 44808199308): Restore network with the service not answering said "Restart the Mac" with
- *  next:null. On macOS one launchctl line restarts the daemon, then the restore runs again. Pure. */
-export function restoreUnavailableNext(platform: string, label: string, cli: string): string {
-  return platform === 'darwin' ? `sudo launchctl kickstart -k system/${label}, then ${cli} daemon restore-network` : `${cli} daemon doctor`;
-}
-
 export interface DoctorRowLite { name: string; ok: boolean; level: 'ok' | 'warn' | 'fail' | 'skip'; detail: string }
 const PASSED_BY_SERVICE = /it is running, so they passed/i;
 

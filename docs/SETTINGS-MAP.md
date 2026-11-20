@@ -31,7 +31,7 @@ CLI writes report a dropped value as `Invalid value … (left unchanged)`, exit 
 | `favourites` | node addresses (≤ 500) | [] | star on a node | `nodes fav <node>` (toggle) |
 | `poll` | seconds per job, see §3 | §3 | Settings → Background refresh | `poll show / set / reset` |
 
-## 2. Service settings — `/var/db/dvpnd/client/config.toml` (+ root config)
+## 2. Service settings — `/Library/Application Support/sentinel-dvpn/c0/config.toml` (+ root config)
 Validated by `src/core/daemon/config.ts` `validateSettings()` before anything is asked;
 applied by one administrator prompt (root helper `apply-daemon-config.sh`) + LaunchDaemon
 restart (`applyDaemonSettings`). A live change restarts dvpnd under a running session: the
@@ -41,7 +41,7 @@ Read: `daemon settings` (escrow in tDVPN, prepay in MB / min).
 
 | Field | Values | Screen | CLI flag |
 |---|---|---|---|
-| `killSwitch` | off \| on \| persist — dvpnd pf anchor `dvpnd`, both directions; no protocol is refused on macOS (the gap #29 refusal is Windows only) | Settings → VPN service | `--kill-switch` |
+| `killSwitch` | off \| on \| persist — dvpnd pf anchor `sentinel-dvpn-c0`, both directions; no protocol is refused on macOS (the gap #29 refusal is Windows only) | Settings → VPN service | `--kill-switch` |
 | `dnsServers` | preset handshake / cloudflare / google / quad9, or 1–4 IPs | same | `--dns` |
 | `allowLan` | bool (the LAN passes both ways, stateless, only when true) | same | `--allow-lan` |
 | `wholeDevice` | bool (V2Ray/Xray: utun for every app, or a SOCKS proxy only) | same | `--whole-device` |

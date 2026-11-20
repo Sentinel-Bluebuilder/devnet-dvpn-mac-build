@@ -4,7 +4,7 @@
 // Exit codes: 0 ok, 1 error, 2 needs --yes, 3 usage.
 import path from 'node:path';
 import fs from 'node:fs';
-import { parseArgs, UsageError } from './args';
+import { parseArgs, UsageError, requireValues } from './args';
 import { COMMANDS, NeedsConfirm, type Out } from './commands';
 import { GROUP_LABEL, entriesFor, entryFor, unknownFlags } from './catalogue';
 import { isAndroid } from '../shared/is-android';
@@ -22,7 +22,7 @@ function writeUsage(message: string, json: boolean, usageLine: string | null): v
   if (o.stream === 'stdout') process.stdout.write(o.text);
   else process.stderr.write(consoleText(o.text, process.stderr));
 }
-import { exitCodeFor } from './exit-codes';
+import { exitCodeFor, PAYING_COMMANDS } from './exit-codes';
 
 function resourcesDir(): string {
   if (process.env.DVPN_RESOURCES) return process.env.DVPN_RESOURCES;
@@ -83,6 +83,8 @@ async function main(): Promise<number> {
     return 3;
   }
 
+  // AUD-2 M5: `--keyfile` with no path must not sign with another wallet (DVPN_KEYFILE or the stored one).
+  try { requireValues(args, ['keyfile']); } catch (err) { if (err instanceof UsageError) { writeUsage(err.message, json, null); return 3; } throw err; }
   const dataDir = defaultDataDir();
   const keyfile = typeof args.flags.keyfile === 'string' ? args.flags.keyfile : process.env.DVPN_KEYFILE;
   initRuntime({ name: 'cli', resourcesDir: resourcesDir(), dataDir, keyStore: cliKeyStore(dataDir, keyfile), emit: () => undefined });
@@ -109,7 +111,7 @@ async function main(): Promise<number> {
     if (err instanceof UsageError) { writeUsage(redactUrls(err.message), json, entryFor(args._.join(' '))?.usage ?? null); return 3; }
     // Q0433/Q0453 (#32): a daemon call's raw gRPC text becomes one plain line (the raw goes to the log).
     // S4: the class of the failure is the exit code (exit-codes.ts); the precise reason stays in `code`.
-    return exitCodeFor(writeError(err, json, name));
+    return exitCodeFor(writeError(err, json, name), PAYING_COMMANDS.includes(name));
   } finally {
     if (linked) stopDaemonLink();
   }

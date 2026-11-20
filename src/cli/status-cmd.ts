@@ -172,5 +172,5 @@ export function reconnectBlockedNext(conn: Pick<ConnView, 'phase' | 'title'> | n
 export function blockedAdvice(killSwitch: string | undefined): string {
   return killSwitch === 'persist'
     ? 'Internet blocked or down. The kill switch keeps it blocked after a crash or restart: reconnect, or run "daemon restore-network" to get the internet back.'
-    : 'Internet blocked or down. If the kill switch is still blocking (after a crash or restart), "disconnect" gives the internet back.';
+    : 'Internet blocked or down. If the kill switch is still blocking (after a crash or restart), run "devnet-dvpn daemon restore-network" to get the internet back.'; // AUD-2 M9
 }

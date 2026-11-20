@@ -7,6 +7,14 @@
 // secret in it) so `exists` needs no Keychain round trip.
 import { cliErr, CLI_NAME } from './cli-fail';
 import fs from 'node:fs';
+import os from 'node:os';
+
+/** KWIN-USER (#38 rc.9): this Windows account as icacls takes it (DOMAIN\\user), written into the line: PowerShell
+ *  never expands %USERNAME%. Pure over the environment; exported for tests. */
+export function windowsAccount(env: NodeJS.ProcessEnv = process.env): string {
+  const user = env.USERNAME || os.userInfo().username;
+  return env.USERDOMAIN ? `${env.USERDOMAIN}\\${user}` : user;
+}
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { log } from '../main/logger';
@@ -69,15 +77,33 @@ function lookup(dataDir: string): string {
   return security(['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', keychainAccount(dataDir), '-w']).trim();
 }
 
+/** E-EP (#38 rc.9): the one command that lets this user read its key file again, then wallet show. */
+export function keyfileUnreadableNext(file: string, platform: string = process.platform): string {
+  return platform === 'win32'
+    ? `icacls "${file}" /grant "${windowsAccount()}:R", then ${CLI_NAME} wallet show --json` // KWIN-USER
+    : `sudo chown $(id -un) ${shellWord(file)} && chmod 600 ${shellWord(file)}, then ${CLI_NAME} wallet show --json`;
+}
+
+/** E-EP: reads the key file; a file this user may not read is keyfile-unreadable (it was the raw EPERM / EACCES). */
+export function readKeyfile(file: string, read: (f: string) => string = (f) => fs.readFileSync(f, 'utf8')): string {
+  try {
+    return read(file);
+  } catch (err) {
+    const c = (err as NodeJS.ErrnoException).code;
+    if (c === 'EACCES' || c === 'EPERM') throw cliErr('keyfile-unreadable', keyfileUnreadableNext(file), `The key file ${file} cannot be read by this user (${c}). Nothing was sent or signed.`);
+    throw err;
+  }
+}
+
 export function cliKeyStore(dataDir: string, keyfile?: string): KeyStore {
   if (keyfile) {
     return {
       kind: 'keyfile',
       path: keyfile, // E-18: noWallet() names the missing file (#31 main)
       exists: () => fs.existsSync(keyfile),
-      load: (): Keypair | null => (fs.existsSync(keyfile) ? keypairFromInput(fs.readFileSync(keyfile, 'utf8')) : null),
-      save() { throw cliErr('keyfile-read-only', `unset DVPN_KEYFILE, then run the command again`, 'A --keyfile wallet is read-only. Unset DVPN_KEYFILE to import or create a wallet.'); },
-      remove() { throw cliErr('keyfile-read-only', `unset DVPN_KEYFILE, then run the command again`, 'A --keyfile wallet is never deleted by this CLI.'); },
+      load: (): Keypair | null => (fs.existsSync(keyfile) ? keypairFromInput(readKeyfile(keyfile)) : null),
+      save() { throw cliErr('keyfile-read-only', `drop --keyfile and unset DVPN_KEYFILE (PowerShell: Remove-Item Env:DVPN_KEYFILE), then run the command again`, 'A --keyfile / DVPN_KEYFILE wallet is read-only. Run without it to import or create a wallet.'); }, // AUD-2 M11
+      remove() { throw cliErr('keyfile-read-only', `drop --keyfile and unset DVPN_KEYFILE (PowerShell: Remove-Item Env:DVPN_KEYFILE), then run the command again`, 'A --keyfile / DVPN_KEYFILE wallet is never deleted by this CLI.'); },
     };
   }
   const marker = path.join(dataDir, 'wallet.cli.keyring');
@@ -108,8 +134,36 @@ export function cliKeyStore(dataDir: string, keyfile?: string): KeyStore {
 
 // ─── R3 gap 1 (#38 STATE-MATRIX): a key file other users can read is refused before any payment ───
 /** The key file's mode problem (group/other bits set, POSIX only), or null. Pure over the stat; exported for tests. */
-export function keyfileModeProblem(file: string | undefined, platform: NodeJS.Platform = process.platform, statMode?: number): { path: string; mode: string } | null {
-  if (!file || platform === 'win32') return null;
+/** The one command that makes the key file readable by this user only, then the agent up line (K-WIN: per OS). */
+/** A path as one shell word: unchanged when it is plain, else single-quoted (macOS key files often sit under
+ *  "~/Library/Application Support", and an unquoted chmod there runs on two wrong paths). AC-MAC-3, #33 3b64e34c5. */
+export const shellWord = (p: string): string => (/^[A-Za-z0-9_./@%+:=-]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`);
+export const keyfileModeNext = (file: string, platform: string = process.platform, account: string = windowsAccount()): string => platform === 'win32'
+  ? `icacls "${file}" /inheritance:r /grant:r "${account}:F", then ${CLI_NAME} agent up --yes`
+  : `chmod 600 ${shellWord(file)}, then ${CLI_NAME} agent up --yes`;
+
+/** K-WIN (#38 rc.9): reads a file's ACL on Windows. Injected in tests. */
+export type AclRunner = (file: string) => string;
+const icacls: AclRunner = (file) => execFileSync('icacls', [file], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+// The groups every local account is in (names, or the bare SIDs icacls prints when it cannot resolve them): an allow
+// ACE for one of them lets other users read the wallet key. The first ACE sits on the line with the file path.
+const OPEN_ACE = /(?:^|\s)(BUILTIN\\Users|Everyone|NT AUTHORITY\\Authenticated Users|\*?S-1-5-32-545|\*?S-1-1-0|\*?S-1-5-11):((?:\([^)]*\))+)/gi;
+
+/** The first allow ACE in `icacls` output that opens the file to all local users, as icacls prints it; or null. */
+export function openAce(icaclsOut: string): string | null {
+  for (const m of icaclsOut.matchAll(OPEN_ACE)) if (!/\(DENY\)/i.test(m[2])) return `${m[1]}:${m[2]}`;
+  return null;
+}
+
+export function keyfileModeProblem(file: string | undefined, platform: NodeJS.Platform = process.platform, statMode?: number, acl: AclRunner = icacls): { path: string; mode: string } | null {
+  if (!file) return null;
+  if (platform === 'win32') {
+    // K-WIN: there is no mode on Windows; the ACL says who can read it. A failed read never blocks (fail-open).
+    let out: string;
+    try { out = acl(file); } catch (err) { log.warn('key file ACL not read (icacls); not checked', { file, err: (err as Error).message }); return null; }
+    const ace = openAce(out);
+    return ace ? { path: file, mode: ace } : null;
+  }
   let mode = statMode;
   if (mode === undefined) {
     // AUDIT M13: logged, never a silent catch; a missing file is keyfile-missing, named elsewhere

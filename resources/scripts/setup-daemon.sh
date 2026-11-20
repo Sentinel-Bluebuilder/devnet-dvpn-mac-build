@@ -71,11 +71,27 @@ fi
 if [ ! -f "$HOME_DIR/config.toml" ]; then
   [ -f "$STAGING/config.toml" ] || die "staging home has no config.toml: $STAGING"
   mkdir -p "$HOME_DIR"
-  cp -Rp "$STAGING/." "$HOME_DIR/" || die 'could not copy the staged home'
+  # AC-MAC-1 P2-1: the staging folder is the user's and `cp -Rp` keeps symlinks; below, root writes
+  # device.pub and migrates config.toml, which would follow a planted link to a root file. Copy into a
+  # root-owned folder first (the user can no longer change it), refuse any link there, then copy on.
+  copy="$(mktemp -d "$DAEMON_ROOT/.staged.XXXXXX")" || die 'could not make a folder for the staged home'
+  cp -Rp "$STAGING/." "$copy/" || { rm -rf -- "$copy"; die 'could not copy the staged home'; }
+  if [ -n "$(find "$copy" -type l -print 2>/dev/null | head -1)" ]; then
+    rm -rf -- "$copy"; die "the staged home holds a symbolic link; refusing it: $STAGING"
+  fi
+  cp -Rp "$copy/." "$HOME_DIR/" || { rm -rf -- "$copy"; die 'could not copy the staged home'; }
+  rm -rf -- "$copy"
 fi
 # a home kept from an older sentinel-dvpnd (reinstall) may still carry pre-cb33 key names / a stray
 # socket_group; the migrate step brings its one config.toml up to the cb33 shape (no-op if already so).
 /bin/bash "$HERE/migrate-daemon-config.sh" --DaemonHome "$HOME_DIR" >/dev/null || die 'could not update the service settings to the cb33 layout'
+# E-ST owner (#38 rc.9 blocker, macOS twin of the Windows wallet-switch bug): a home kept above (same device key)
+# still names the owner it was set up for. --Owner = the wallet the app recorded for this device; the service runs
+# for that owner from now on (its grant is the one dvpnd checks). Older callers pass no --Owner: unchanged.
+if [ -n "${ARG_Owner:-}" ]; then
+  owner_set=$(set_config_owner "$HOME_DIR/config.toml" "$ARG_Owner") || die "could not set the service owner to $ARG_Owner"
+  [ "$owner_set" = changed ] && echo "service owner set to $ARG_Owner" >&2
+fi
 chown -R root:"$GROUP" "$DAEMON_ROOT"
 # closed to other users: the group (and below, the setup user by ACL before a new login) gets in
 chmod 750 "$DAEMON_ROOT"
@@ -91,6 +107,7 @@ done
 # the device ADDRESS (public half) for the app: the key folder itself stays root-only
 PUB=$("$DVPND" key list --instance "$INSTANCE" --home "$HOME_DIR" 2>/dev/null | grep -oE '"name":"(operator|device)","public_key":"[1-9A-HJ-NP-Za-km-z]{32,44}"' | grep -oE '[1-9A-HJ-NP-Za-km-z]{32,44}"$' | tr -d '"')
 [ -n "$PUB" ] || die 'could not read the device public key'
+rm -f -- "$HOME_DIR/device.pub"   # P2-1: never write through a link left in the home
 printf '%s\n' "$PUB" > "$HOME_DIR/device.pub" && chmod 600 "$HOME_DIR/device.pub"
 # the database holds signed vouchers, plan tickets and the session history: root only. A home
 # from an older setup has it 0644 (launchd's default umask; the plist now sets 077).

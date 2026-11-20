@@ -105,3 +105,22 @@ svc_start() {
 }
 svc_stop() { svc_loaded || return 0; launchctl bootout "system/$LABEL" 2>/dev/null; local i; for i in $(seq 1 60); do svc_loaded || return 0; sleep 0.5; done; return 1; }
 wait_socket() { local i; for i in $(seq 1 150); do [ -S "$1" ] && return 0; sleep 0.2; done; return 1; }
+# ─── E-ST owner (#38 rc.9): set_config_owner <config.toml> <owner> ───
+# A kept service home (the same device key: E-ST adopted it in a fresh data dir, or a re-install) still names the
+# owner it was set up for; dvpnd then checks the grant from THAT owner and the wallet the app loaded is ignored.
+# Rewrites the top-level `owner = "..."` (never one inside a [section]) when it differs. Writes a temp file in the
+# same root-owned folder and renames it over (no cut file); refuses a link. Prints `same` or `changed`.
+set_config_owner() {
+  local f="$1" o="$2" cur t
+  [[ "$o" =~ ^[1-9A-HJ-NP-Za-km-z]{32,44}$ ]] || { echo "not an owner address: $o" >&2; return 2; }
+  { [ -f "$f" ] && [ ! -L "$f" ]; } || { echo "no service config at $f" >&2; return 2; }
+  cur=$(awk '/^[[:space:]]*\[/ { exit } /^[[:space:]]*owner[[:space:]]*=/ { v = $0; sub(/^[^=]*=[[:space:]]*"?/, "", v); sub(/"?[[:space:]]*(#.*)?$/, "", v); print v; exit }' "$f")
+  [ -n "$cur" ] || { echo "the service config names no owner: $f" >&2; return 2; }
+  [ "$cur" = "$o" ] && { echo same; return 0; }
+  t="$(mktemp "$(dirname "$f")/.owner.XXXXXX")" || return 1
+  if ! awk -v o="$o" 'BEGIN { d = 0 } !d && /^[[:space:]]*\[/ { d = 1 } !d && /^[[:space:]]*owner[[:space:]]*=/ { print "owner = \"" o "\""; d = 1; next } { print }' "$f" > "$t"; then
+    rm -f -- "$t"; return 1
+  fi
+  chmod 600 "$t" && mv -f -- "$t" "$f" || { rm -f -- "$t"; return 1; }
+  echo changed
+}

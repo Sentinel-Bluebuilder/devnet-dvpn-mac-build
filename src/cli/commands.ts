@@ -26,6 +26,7 @@ import { getDaemonSettings } from '../main/daemon/settings';
 import { getSettings } from '../main/system/settings';
 import { createWallet, importWallet, logout, ownerAddress, ownerSigner, noWallet } from '../main/wallet/vault';
 import { createKeyfile } from '../core/wallet/new-keyfile';
+import { keyfileModeProblem, keyfileModeNext } from './keystore';
 import { discoverNode, probeNode } from '../core/nodes/discovery';
 import { costPreview, priceLabel, type Basis } from '../core/pricing/cost';
 import { tdvpn, sol, toBaseUnits, toLamports } from '../core/chain/amounts';
@@ -125,11 +126,15 @@ const wallet: Cmd = async (a, o) => {
   if (sub === 'show') {
     if (!ownerAddress()) {
       if (noWallet().code === 'keyfile-missing') throw walletMissingError(); // M9: exit 1, the file is named
-      o.print('No wallet. Run "wallet create" or "wallet import <file>".', { wallet: null });
+      o.print(`No wallet. Run "${CLI_NAME} wallet create --keyfile <path> --yes" or "${CLI_NAME} wallet import <file>".`, { wallet: null, next: `${CLI_NAME} wallet create --keyfile <path> --yes` }); // AUD-2 M13
       return;
     }
     const w = await walletRead();
-    o.print(`Address    ${w.owner}\nSOL        ${sol(w.ownerLamports)}\ntDVPN      ${tdvpn(w.ownerTdvpn)}\nRefundable ${tdvpn(w.userBalance)}\nApproved   ${tdvpn(w.delegated)} (shared by all devices)`, { ...w, next: `${CLI_NAME} agent status --json` });
+    // K-WIN2 (#38 rc.9): an open key file is a warning here (agent up refuses it); next is the fix.
+    const kfm = keyfileModeProblem(str(a, 'keyfile') ?? process.env.DVPN_KEYFILE);
+    const kfmText = kfm ? `The key file ${kfm.path} can be read by other users (mode ${kfm.mode}).` : null;
+    o.print(`Address    ${w.owner}\nSOL        ${sol(w.ownerLamports)}\ntDVPN      ${tdvpn(w.ownerTdvpn)}\nRefundable ${tdvpn(w.userBalance)}\nApproved   ${tdvpn(w.delegated)} (shared by all devices)${kfm ? `\nWarning: ${kfmText} Fix: ${keyfileModeNext(kfm.path)}` : ''}`,
+      { ...w, ...(kfm ? { keyfileMode: kfmText } : {}), next: kfm ? keyfileModeNext(kfm.path) : `${CLI_NAME} agent status --json` });
   } else if (sub === 'create') {
     // Q0490: --keyfile / DVPN_KEYFILE naming a file that does not exist yet = make a NEW key file there (no keyring needed).
     const kf = str(a, 'keyfile') ?? process.env.DVPN_KEYFILE;
@@ -187,7 +192,7 @@ ${qr}Devnet SOL: https://faucet.solana.com/`, { address: addr });
 // ─── device ───
 const device: Cmd = async (a, o) => {
   const sub = a._[1] ?? 'show';
-  const allowance = str(a, 'allowance', getSettings().allowanceTdvpn)!;
+  let allowance = str(a, 'allowance', getSettings().allowanceTdvpn)!;
   if (sub === 'show') {
     const w = await walletRead();
     const d = deviceRecord();
@@ -210,14 +215,41 @@ const device: Cmd = async (a, o) => {
     o.print(`Recorded device ${pk}`, { device: pk });
   } else if (sub === 'plan' || sub === 'setup') {
     // The service's message names the Welcome screen; a CLI user has none (#32, Linux 92fce1ef).
-    if (ownerAddress() && !daemonInfo().device) throw cliErr('no-device-key', noDeviceKeyNext(daemonInfo().reachable), `${isAndroid() ? 'This phone' : 'This computer'} has no device key yet. ${daemonInfo().reachable ? `${CLI_NAME} agent up --yes creates it and sets this device up in one step.` : `The service is not installed; ${CLI_NAME} daemon install --yes installs it and creates the key.`} Nothing was signed.`); // E-85 + P-N (rc.8): code + ONE command for agents
+    if (ownerAddress() && !daemonInfo().device) throw cliErr('no-device-key', noDeviceKeyNext(daemonInfo().reachable), `${isAndroid() ? 'This phone' : 'This computer'} has no device key yet. ${daemonInfo().reachable ? `${CLI_NAME} agent up --yes creates it and sets this device up in one step.` : `The service is not installed; ${CLI_NAME} daemon init --yes creates the key (no administrator needed), then device setup --yes, then daemon install --yes.`} Nothing was signed.`); // E-85 + P-N (rc.8): code + ONE command for agents
+    // LIM-2 (#38 rc.9, T-A 5): without --allowance, plan/setup keep this computer's current limit. The Settings amount
+    // was the default, so `device setup --yes` (to fix permissions, SOL or the service) changed the limit as a side
+    // effect. The Settings amount stays the default for a first setup (no grant yet).
+    // W91 (#38 rc.9, AC-BLIND rc.8 live): a first setup with no --allowance takes min(Settings limit, wallet tDVPN),
+    // with a warning when capped; it is never refused for the balance (agent up --yes set the device up on the same
+    // wallet). Only an explicit --allowance above the wallet is refused (W-A3).
+    const implicit = !str(a, 'allowance');
+    let capNote: string | null = null;
+    if (implicit) {
+      const cur = await refreshWallet().catch((err: unknown) => { log.warn('device plan: grant read failed, the Settings limit is used', { err: (err as Error).message }); return null; });
+      if (cur?.grant?.allowance !== undefined && cur?.grant?.allowance !== null) allowance = tdvpn(String(cur.grant.allowance));
+      else if (cur && /^\d+(\.\d+)?$/.test(allowance)) {
+        const own = BigInt(String(cur.ownerTdvpn ?? 0));
+        const setting = BigInt(toBaseUnits(allowance));
+        if (own < setting) {
+          capNote = own > 0n
+            ? `No --allowance: the spending limit is this wallet's ${tdvpn(own.toString())} tDVPN, below the Settings limit of ${tdvpn(setting.toString())} tDVPN. After funding, raise it with ${CLI_NAME} device setup --allowance <N> --yes.`
+            : `This wallet holds 0 tDVPN: the spending limit is the Settings ${tdvpn(setting.toString())} tDVPN, and no deposit can be paid until the wallet is funded.`;
+          if (own > 0n) allowance = tdvpn(own.toString());
+        }
+      }
+    }
+    // LIM-4 (#38 rc.9): --max-price is the agent's own cap; it is not used here, only carried into the next.
+    const mpFlag = str(a, 'max-price');
+    if (mpFlag !== undefined && !/^\d+(\.\d+)?$/.test(mpFlag)) throw new UsageError(`--max-price needs a number of tDVPN per GB or per hour (got "${mpFlag}").`);
+    const upFlags = mpFlag ? ` --max-price ${mpFlag}` : '';
     // W-A3 (rc.8): an allowance above the wallet's tDVPN is refused before the plan (exit 4, --force overrides); 0 warns.
     // An allowance that does not parse is left to deviceSetupPlan, which answers invalid-amount as before.
     let allowanceBase: bigint | null = null;
     try { allowanceBase = BigInt(toBaseUnits(allowance)); } catch (err) { log.info('device plan: allowance does not parse; the plan refuses it', { err: (err as Error).message }); }
     const wa = allowanceBase === null ? null : await refreshWallet().catch((err: unknown) => { log.warn('device plan: balance read failed', { err: (err as Error).message }); return null; });
     const ownTd = wa ? BigInt(String(wa.ownerTdvpn ?? 0)) : null;
-    const ac = allowanceBase === null ? { ok: true as const, warning: null } : allowanceCheck(allowanceBase, ownTd, flag(a, 'force'));
+    const ac0 = allowanceBase === null ? { ok: true as const, warning: null } : allowanceCheck(allowanceBase, ownTd, flag(a, 'force') || implicit);
+    const ac = ac0.ok ? { ok: true as const, warning: ac0.warning ?? capNote } : ac0;
     if (!ac.ok) throw cliErr(ac.code, `${CLI_NAME} device ${sub} --allowance ${tdvpn(ownTd ?? 0n)}${sub === 'setup' ? ' --yes' : ''}`, ac.message);
     const p = await deviceSetupPlan(allowance);
     need(p);
@@ -230,15 +262,15 @@ const device: Cmd = async (a, o) => {
       const gone = sub === 'setup' ? deviceHomeGone() : null;
       if (gone) throw cliErr('device-home-gone', `${CLI_NAME} daemon install --yes`, gone);
       const svc = sub === 'setup' ? await startServiceIfStopped() : undefined;
-      o.print(`Device already set up for that allowance.${svc === 'started' ? ' VPN service started.' : svc === 'no-right' || svc === 'failed' ? `\n${SERVICE_NOT_STARTED}` : ''}`, { steps: [], service: svc, next: deviceNext(svc) });
+      o.print(`Device already set up for that allowance.${svc === 'started' ? ' VPN service started.' : svc === 'no-right' || svc === 'failed' ? `\n${SERVICE_NOT_STARTED}` : ''}`, { steps: [], service: svc, next: deviceNext(svc, upFlags) });
       return;
     }
-    if (sub === 'plan') { o.print(`${p.data!.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\nSOL cost: ${sol(solCost)}${ac.warning ? `\nWarning: ${ac.warning}` : ''}`, { ok: true, ...p.data, ...extra, next: `${CLI_NAME} device setup --allowance ${allowance} --yes` }); return; }
+    if (sub === 'plan') { o.print(`${p.data!.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\nSOL cost: ${sol(solCost)}${ac.warning ? `\nWarning: ${ac.warning}` : ''}`, { ok: true, ...p.data, ...extra, next: `${CLI_NAME} device setup --allowance ${allowance}${upFlags} --yes` }); return; }
     confirm(a, o, `One transaction:\n${p.data!.steps.map((s) => `  - ${s}`).join('\n')}${ac.warning ? `\nWarning: ${ac.warning}` : ''}`, { ...p.data, ...extra });
     const r = await deviceSetup(allowance);
     need(r);
     const svc = await startServiceIfStopped();
-    o.print(`Device ready.${r.data ? ` Transaction: ${r.data}.` : ''}${svc === 'no-right' || svc === 'failed' ? `\n${SERVICE_NOT_STARTED}` : svc === 'no-service' ? `\n${NO_SERVICE_NOTE}` : ''}`, { signature: r.data, solSentToDevice: String(p.data!.topUpLamports || 0), feeLamports: BASE_FEE_LAMPORTS.toString(), ...(ac.warning ? { warning: ac.warning } : {}), service: svc, next: deviceNext(svc), ...(svc === 'no-service' ? { serviceNote: NO_SERVICE_NOTE } : {}) });
+    o.print(`Device ready.${r.data ? ` Transaction: ${r.data}.` : ''}${svc === 'no-right' || svc === 'failed' ? `\n${SERVICE_NOT_STARTED}` : svc === 'no-service' ? `\n${NO_SERVICE_NOTE}` : ''}`, { signature: r.data, solSentToDevice: String(p.data!.topUpLamports || 0), feeLamports: BASE_FEE_LAMPORTS.toString(), ...(ac.warning ? { warning: ac.warning } : {}), service: svc, next: deviceNext(svc, upFlags), ...(svc === 'no-service' ? { serviceNote: NO_SERVICE_NOTE } : {}) });
   } else if (sub === 'revoke' && str(a, 'device')) {
     // Another device of this wallet (gap #95): a computer that is gone, its key lost.
     const other = str(a, 'device')!;
@@ -350,12 +382,12 @@ const connectCmd: Cmd = async (a, o) => {
     let shownEscrow: string | undefined;
     if (subAddr) {
       const s = (await refreshSubscriptions()).find((x) => x.address === subAddr);
-      if (!s) throw new Error('You do not hold that subscription.');
+      if (!s) throw cliErr('no-subscription', `${CLI_NAME} plans subscriptions`, 'You do not hold that subscription. Nothing was paid.'); // AUD-2 M14
       subscription = { provider: s.provider, subscription: s.address };
       confirm(a, o, `Connect to ${node} using plan subscription ${subAddr} (no deposit).`);
     } else {
       const n = await discoverNode(node);
-      if (!n) throw new Error('No such node.');
+      if (!n) throw cliErr('node-gone', `${CLI_NAME} nodes list --online --json`, 'No such node. Nothing was paid.'); // AUD-2 M14
       const c = costPreview(n, basis, units);
       shownEscrow = c.escrow;
       confirm(a, o, `Connect to ${node}: deposit up to ${c.escrowText} (${units} ${basis === 'per_gb' ? 'GB' : 'h'}), unused part refunded automatically.`, c);
@@ -372,13 +404,14 @@ const connectCmd: Cmd = async (a, o) => {
   } catch (err) {
     // With another VPN on, a failed connect is usually caused by that VPN (rival-d9: the network
     // looked unreachable because the other tunnel swallowed all traffic). Name the cause (D6).
-    if (rivals.length && !(err instanceof UsageError) && !(err as Error).message.includes('Another VPN (')) throw new Error(`${(err as Error).message}\n-> Another VPN (${rivals.join(', ')}) is on and is probably blocking this: turn it off, then connect again.`);
+    if (rivals.length && !(err instanceof UsageError) && !(err as Error).message.includes('Another VPN (')) throw Object.assign(new Error(`${(err as Error).message}\n-> Another VPN (${rivals.join(', ')}) is on and is probably blocking this: turn it off, then connect again.`), { code: (err as { code?: string }).code, action: (err as { action?: string | null }).action ?? null }); // AUD-2 M15: keep the code
     throw err;
   }
 };
 
-function follow(o: Out): Promise<void> {
-  return new Promise((resolve) => {
+/** Exported for tests (A10). */
+export function follow(o: Out): Promise<void> {
+  return new Promise((resolve, reject) => {
     let last = '';
     const t = setInterval(() => {
       const s = snapshot();
@@ -387,7 +420,12 @@ function follow(o: Out): Promise<void> {
       const line = `${s.conn.title}  down ${formatBytes(s.session.rxBytes)}  up ${formatBytes(s.session.txBytes)}  spent ${tdvpn(s.session.spent)} tDVPN`;
       if (line !== last) { last = line; o.print(line, s.session); }
     }, 5000);
-    process.once('SIGINT', () => { clearInterval(t); void disconnect().then(() => resolve()); });
+    // A10 (AC-CODES audit): a disconnect that rejected was an unhandled rejection (Node 22 exited with a stack, no coded
+    // line, no money note). It now ends follow with disconnect-failed and the status read as next.
+    process.once('SIGINT', () => {
+      clearInterval(t);
+      disconnect().then(() => resolve(), (err: unknown) => reject(cliErr('disconnect-failed', `${CLI_NAME} agent status --json`, `Ctrl+C: the session could not be closed (${(err as Error)?.message ?? String(err)}).`)));
+    });
   });
 }
 

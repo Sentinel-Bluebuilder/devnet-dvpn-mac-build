@@ -12,17 +12,30 @@ export function cliErr(code: string, next: string | null, message: string): Erro
 }
 
 /** R2: the next step after device setup: the service when it is not running, else the connect. Pure; unit-tested. */
-export function deviceNext(service: string | undefined | null): string {
+/** LIM-4 (#38 rc.9): `upFlags` (e.g. " --max-price 0.01") are the agent's own, carried into the agent up line. */
+export function deviceNext(service: string | undefined | null, upFlags = ''): string {
   return service === 'no-service' || service === 'no-right' || service === 'failed'
     ? `${CLI_NAME} daemon install --yes`
-    : `${CLI_NAME} agent up --yes`;
+    : `${CLI_NAME} agent up${upFlags} --yes`;
 }
 
 /** P-N (#38 rc.8, Windows R4): `device setup` before the service holds a device key. ONE command: `agent up --yes`
  *  creates the key and sets the device up itself when the service is installed; without the service, install it.
  *  Pure; unit-tested. */
 export function noDeviceKeyNext(serviceReachable: boolean): string {
-  return serviceReachable ? `${CLI_NAME} agent up --yes` : `${CLI_NAME} daemon install --yes`;
+  // AUD-1 (#38 rc.9 final audit): without a service the next was `daemon install`, which refuses an unset-up device
+  // (device-not-ready -> device setup -> no-device-key: a loop). `daemon init` makes the key, no administrator needed.
+  return serviceReachable ? `${CLI_NAME} agent up --yes` : `${CLI_NAME} daemon init --yes, then ${CLI_NAME} device setup --yes`;
+}
+
+/** AUD-1: after `daemon init` (the key exists, nothing signed yet). */
+export const INIT_NEXT = `${CLI_NAME} device setup --yes`;
+
+/** AUD-1: `daemon install` before the device is set up: init first when this computer has no device key. Pure. */
+export function installNotReadyNext(hasDeviceKey: boolean): string {
+  return hasDeviceKey
+    ? `${CLI_NAME} device setup --yes, then ${CLI_NAME} daemon install --yes`
+    : `${CLI_NAME} daemon init --yes, then ${CLI_NAME} device setup --yes, then ${CLI_NAME} daemon install --yes`;
 }
 
 /** R2 (S5): the public row that explains a code (docs/CODES.md, one anchor per code, checked by check-glossary). */
@@ -30,3 +43,14 @@ export const CODES_URL = 'https://github.com/Sentinel-Bluebuilder/agentic-privac
 export function docUrlFor(code: string): string {
   return `${CODES_URL}#code-${code.toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}`;
 }
+
+/** RESTORE-DEAD-NEXT (#38 rc.9): `daemon restore-network` when the service does not answer. A kill switch kept by a
+ *  dead service is lifted only once it runs again (Windows WFP filters stay with "On" = persist), so the next starts
+ *  it, then restores again. Pure; exported for tests. */
+export const restoreDeadNext = (platform: string = process.platform): string => platform === 'win32'
+  ? `Start-Service 'sentinel-dvpnd$c0' in an administrator PowerShell, then ${CLI_NAME} daemon restore-network`
+  : platform === 'linux'
+    ? `sudo systemctl restart sentinel-dvpnd@c0, then ${CLI_NAME} daemon restore-network`
+    : platform === 'darwin' // #33 PF-DEAD: launchd KeepAlive restarts it; kickstart -k does it now
+      ? `sudo launchctl kickstart -k system/co.sentinel.sentinel-dvpnd.c0, then ${CLI_NAME} daemon restore-network`
+      : `${CLI_NAME} daemon doctor --json`;

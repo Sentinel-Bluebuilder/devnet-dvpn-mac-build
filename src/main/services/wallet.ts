@@ -1,5 +1,5 @@
 // ─── Wallet actions (F2.4–F2.6, F3) ───
-import { deviceLimitFor } from '../../core/session/device-limit';
+import { deviceLimitFor, firstSetupLimit } from '../../core/session/device-limit';
 import { PublicKey, SystemProgram, type TransactionInstruction } from '@solana/web3.js';
 import { TOKEN_2022_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createTransferCheckedInstruction } from '@solana/spl-token';
 import type { Result, WalletStatus } from '../../shared/types';
@@ -107,7 +107,8 @@ export async function ensureDevicePermission(minAllowanceBase = '0', opts: { con
   try {
     if (decision === 'run') {
       // Room for several deposits (device-limit.ts): sized to one, every Connect signed it again.
-      const want = deviceLimitFor(BigInt(toBaseUnits(getSettings().allowanceTdvpn)), BigInt(minAllowanceBase || '0'));
+      // W91b: a first setup (no grant yet) is capped at the wallet's tDVPN; a raise of an existing limit is not.
+      const want = firstSetupLimit(deviceLimitFor(BigInt(toBaseUnits(getSettings().allowanceTdvpn)), BigInt(minAllowanceBase || '0')), w.grant ? null : BigInt(String(w.ownerTdvpn ?? 0)), BigInt(minAllowanceBase || '0'));
       const r = await deviceSetup(tdvpnText(want.toString()), { auto: true });
       if (!r.ok) throw new Error(r.error);
     }
@@ -169,7 +170,7 @@ export async function switchWallet(owner: string, recorded: string, minAllowance
   }
   const need = ownerSolForSetup(0);
   if (w.ownerLamports < need) return { error: OWNER_SOL_SHORT(need), action: 'Open Wallet', code: 'device-sol' };
-  const want = deviceLimitFor(BigInt(toBaseUnits(s.allowanceTdvpn)), BigInt(minAllowanceBase || '0'));
+  const want = firstSetupLimit(deviceLimitFor(BigInt(toBaseUnits(s.allowanceTdvpn)), BigInt(minAllowanceBase || '0')), BigInt(String(w.ownerTdvpn ?? 0)), BigInt(minAllowanceBase || '0')); // W91b: a new device
   patch({ conn: viewFor('preflight', tr('Setting up this computer for this wallet…')) });
   const staged = await stageSwitchDevice(owner);
   if (!staged.ok || !staged.device) return { error: staged.error ?? tr('Could not set up this computer for this wallet.'), action: 'Open Diagnostics', code: 'device-permission' };

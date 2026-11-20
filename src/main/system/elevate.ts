@@ -8,7 +8,7 @@
 //   otherwise               → osascript `do shell script … with administrator privileges`: the
 //                             system password prompt, with our own message. The shell command is
 //                             built here from validated arguments, each single-quoted.
-// After setup the helper runs from the root-owned copy in /usr/local/lib/devnet-dvpn/scripts (the
+// After setup the helper runs from the root-owned copy in /Library/devnet-dvpn/scripts (ROOT_SCRIPTS_DIR) (the
 // app bundle may be writable by the user); setup-daemon itself always runs from the bundle so a
 // new app version installs its new scripts.
 import { execFile } from 'node:child_process';
@@ -25,7 +25,7 @@ export const ROOT_SCRIPTS_DIR = '/Library/devnet-dvpn/scripts';
 /** The text of the system password prompt. */
 export const PROMPT_TEXT = 'Devnet dVPN needs an administrator to change the VPN service or network settings.';
 
-export interface ElevatedResult { status: 'ok' | 'error' | 'cancelled'; detail: string; [k: string]: unknown }
+export interface ElevatedResult { status: 'ok' | 'error' | 'cancelled'; detail: string; code?: string; [k: string]: unknown }
 
 /** The helper's arguments: step name, then --Key value pairs (exported for tests). */
 export function helperArgs(step: string, args: Record<string, string>): string[] {

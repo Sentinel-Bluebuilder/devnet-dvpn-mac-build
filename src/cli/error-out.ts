@@ -5,7 +5,7 @@
 import { log, redact } from '../main/logger';
 import { daemonErrorCopy } from '../core/daemon/link-copy';
 import { rpcUnavailableCopy } from '../core/chain/rpc';
-import { cliActionHint, cliMessage } from './action-hint';
+import { cliActionHint, cliMessage, commandNext } from './action-hint';
 import { moneyNote, TRANSFER_COMMANDS } from './money-note';
 import { docUrlFor, CLI_NAME } from './cli-fail';
 
@@ -35,13 +35,13 @@ export function plainError(err: unknown, command: string): Error & { code?: stri
 }
 
 /** Commands that can pay: their failure says whether money moved (P8). Others (`status`, `nodes list`…) never pay. */
-const MONEY_COMMANDS: readonly string[] = ['agent', 'connect', 'switch', 'test', ...TRANSFER_COMMANDS]; // R2: transfers say whether money moved too
+export const MONEY_COMMANDS: readonly string[] = ['agent', 'connect', 'switch', 'test', ...TRANSFER_COMMANDS]; // R2: transfers say whether money moved too
 
 /** What to write: stdout for --json, stderr for text. Never a stack. */
 export function errorOutput(err: unknown, json: boolean, command: string): { stream: 'stdout' | 'stderr'; text: string; code: string | null } {
   const e = plainError(err, command);
   const money = MONEY_COMMANDS.includes(command) ? moneyNote(e.code, command) : null;
-  if (json) return { stream: 'stdout', code: e.code ?? null, text: JSON.stringify({ ok: false, error: redact(cliMessage(e.message)), code: e.code ?? null, action: e.action ?? null, next: e.action ?? null, ...(e.code ? { docUrl: docUrlFor(e.code) } : {}), ...(money ? { money } : {}) }) + '\n' };
+  if (json) return { stream: 'stdout', code: e.code ?? null, text: JSON.stringify({ ok: false, error: redact(cliMessage(e.message)), code: e.code ?? null, action: e.action ?? null, next: commandNext(e.action, e.message), ...((e as { alsoNext?: unknown }).alsoNext ? { alsoNext: (e as { alsoNext?: unknown }).alsoNext } : {}), ...(e.code ? { docUrl: docUrlFor(e.code) } : {}), ...(money ? { money } : {}) }) + '\n' };
   // Q0430 (#32 TLX 0.1.12): the action is the app's button label; on the command line, name the command to type.
   const hint = cliActionHint(e.action, e.message);
   return { stream: 'stderr', code: e.code ?? null, text: `Error: ${redact(cliMessage(e.message))}${money ? `\nMoney: ${money}` : ''}${hint ? `\n→ ${hint}` : ''}\n` };

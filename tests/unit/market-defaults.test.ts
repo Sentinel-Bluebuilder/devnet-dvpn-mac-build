@@ -85,7 +85,7 @@ describe('R3 gap 1: keyfileModeProblem', () => {
   });
   it('600, Windows, or no key file: no problem (negative controls)', () => {
     expect(keyfileModeProblem('/k.json', 'linux', 0o100600)).toBeNull();
-    expect(keyfileModeProblem('C:/k.json', 'win32', 0o100666)).toBeNull();
+    expect(keyfileModeProblem('C:/k.json', 'win32', 0o100666, () => 'C:/k.json DESKTOP-1\\me:(F)\n          NT AUTHORITY\\SYSTEM:(F)\n')).toBeNull(); // K-WIN (rc.9): the ACL decides
     expect(keyfileModeProblem(undefined, 'linux')).toBeNull();
   });
 });
