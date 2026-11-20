@@ -573,7 +573,7 @@ function rawDoctor(home: string): Promise<DoctorCheck[]> {
 // dvpnd will not start until its device key holds a grant, so setup is:
 //   1. initDevice   — `dvpnd init` as the user into <data>/daemon-staging → device address
 //   2. (owner signs device setup: delegate + grant + SOL — services/wallet.deviceSetup)
-//   3. installService — ONE administrator prompt (osascript): copy into /var/db/dvpnd, lock keys,
+//   3. installService — ONE administrator prompt (osascript): copy into /Library/Application Support/sentinel-dvpn/c0, lock keys,
 //      add the user to the 'dvpn' group, write + load the LaunchDaemon, link the CLI
 export function stagingHome(): string {
   return path.join(getHost().dataDir, 'daemon-staging');

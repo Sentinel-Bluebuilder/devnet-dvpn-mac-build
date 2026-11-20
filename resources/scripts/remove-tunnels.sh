@@ -14,6 +14,7 @@ parse_args "$@"
 BIN_ROOT="${ARG_BinRoot:-}"; HOME_DIR="${ARG_DaemonHome:-$DAEMON_ROOT/c0}"
 under "$HOME_DIR" "$DAEMON_ROOT" || die "daemon home must be under $DAEMON_ROOT"
 removed=()
+dns_failed=()   # M11: network services whose DNS could not be put back (their backup is kept)
 ours_exe() { # path → true when it is one of our binaries
   case "$1" in
     "$LIB"/*|/Applications/Devnet\ dVPN.app/*) return 0 ;;
@@ -69,9 +70,10 @@ for bf in "$HOME_DIR/client/dns-networksetup-backup.json" "$HOME_DIR/dns-network
   while IFS=$'\t' read -r svc servers; do
     [ -n "$svc" ] || continue
     # shellcheck disable=SC2086 # servers is a space-separated list of addresses or "Empty"
-    networksetup -setdnsservers "$svc" $servers >/dev/null 2>&1 && removed+=("dns $svc")
+    # AUDIT-FINAL-MACOS M11: a failed set (service renamed/removed) is kept, and so is the backup, never deleted
+    if networksetup -setdnsservers "$svc" $servers >/dev/null 2>&1; then removed+=("dns $svc"); else dns_failed+=("$svc"); fi
   done <<< "$lines"
-  rm -f "$bf"
+  [ ${#dns_failed[@]} -eq 0 ] && rm -f "$bf"
   dscacheutil -flushcache 2>/dev/null; killall -HUP mDNSResponder 2>/dev/null
 done
 
@@ -82,4 +84,6 @@ for rd in /var/run/wireguard /var/run/amneziawg; do
   for n in dvpn-c0; do [ -f "$rd/$n.name" ] && left+=("$n"); done
 done
 if [ ${#left[@]} -gt 0 ]; then die "still present: ${left[*]}"; fi
-if [ ${#removed[@]} -gt 0 ]; then write_result ok "removed: $(IFS=','; echo "${removed[*]}" | sed 's/,/, /g')"; else write_result ok 'none left'; fi
+dns_note=''
+[ ${#dns_failed[@]} -gt 0 ] && dns_note="; dns not restored on: $(IFS=','; echo "${dns_failed[*]}" | sed 's/,/, /g') (backup kept)"
+if [ ${#removed[@]} -gt 0 ]; then write_result ok "removed: $(IFS=','; echo "${removed[*]}" | sed 's/,/, /g')$dns_note"; else write_result ok "none left$dns_note"; fi

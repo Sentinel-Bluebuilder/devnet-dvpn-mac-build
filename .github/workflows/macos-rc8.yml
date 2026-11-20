@@ -39,6 +39,12 @@ jobs:
           node-version: '22'
           cache: npm
 
+      # node-gyp (electron-builder's native rebuild of bigint-buffer) imports distutils, which
+      # Python 3.12+ removed; macos-15 ships 3.12+. 3.11 still has it.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: npm ci
         run: npm ci
 

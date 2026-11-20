@@ -9,6 +9,7 @@ import { cliErr, CLI_NAME } from './cli-fail';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { log } from '../main/logger';
 import type { Keypair } from '@solana/web3.js';
 import { keypairFromInput, keypairToJson } from '../core/wallet/keys';
 import type { KeyStore } from '../main/host';
@@ -111,7 +112,8 @@ export function keyfileModeProblem(file: string | undefined, platform: NodeJS.Pl
   if (!file || platform === 'win32') return null;
   let mode = statMode;
   if (mode === undefined) {
-    try { mode = fs.statSync(file).mode; } catch (err) { return null; /* a missing file is keyfile-missing, named elsewhere */ }
+    // AUDIT M13: logged, never a silent catch; a missing file is keyfile-missing, named elsewhere
+    try { mode = fs.statSync(file).mode; } catch (err) { log.debug('key file stat failed', { file, err: (err as Error).message }); return null; }
   }
   return (mode & 0o077) ? { path: file, mode: (mode & 0o777).toString(8) } : null;
 }

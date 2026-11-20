@@ -5,7 +5,7 @@
 # setup, and only then this step runs as root (one prompt) to: create the socket group and add the
 # user, copy the home into the real instance dir /Library/Application Support/sentinel-dvpn/c0, lock
 # the key folder to root, copy the binaries + Homebrew tools the service runs into root-owned
-# /usr/local/lib/devnet-dvpn, write + load our own LaunchDaemon (root-owned PATH, so finding 1 of the
+# /Library/devnet-dvpn, write + load our own LaunchDaemon (root-owned PATH, so finding 1 of the
 # cb33 launchd PATH issue cannot apply here), link the CLI, and delete the staging copy (it holds the
 # device secret).
 # The daemon runs `run --instance c0` with NO --home, so it reads the real instance dir and gives its
@@ -35,6 +35,17 @@ if [ -n "$USER_NAME" ]; then id -u "$USER_NAME" >/dev/null 2>&1 || die "no such 
 if [ -n "$STAGING" ]; then
   [[ "$STAGING" == /Users/?*/daemon-staging || "$STAGING" == /Users/?*/daemon-switch ]] || die "unexpected staging folder $STAGING"
   [[ "$STAGING" != *..* ]] && [ ! -L "$STAGING" ] || die "unsafe staging folder $STAGING"
+  # AUDIT-FINAL-MACOS M8: the glob is on the string (`*` crosses `/`) and -L checks the last part only, so a symlinked
+  # parent sent `cp -Rp` and the final `rm -rf` elsewhere. The canonical path must equal the given one (no link in the
+  # chain), end in one of the two names, and, with --User, sit under that user's real home (DVPN_DATA_DIR keeps working).
+  staging_real="$(cd -P -- "$STAGING" 2>/dev/null && pwd -P)" || die "staging folder not found: $STAGING"
+  [ "$staging_real" = "$STAGING" ] || die "unsafe staging folder $STAGING (resolves to $staging_real)"
+  case "$(basename -- "$staging_real")" in daemon-staging|daemon-switch) ;; *) die "unexpected staging folder $STAGING" ;; esac
+  if [ -n "$USER_NAME" ]; then
+    user_home="$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+    user_home_real="$(cd -P -- "${user_home:-/nonexistent}" 2>/dev/null && pwd -P)" || die "no home folder for $USER_NAME"
+    case "$staging_real" in "$user_home_real"/?*) ;; *) die "staging folder $STAGING is not under $USER_NAME's home $user_home_real" ;; esac
+  fi
 fi
 
 # 1. socket group + the desktop user in it; an inherited ACL on the home gives THIS user access to
@@ -140,7 +151,8 @@ SVC_PATH="$LIB/tools"
 for d in v2ray xray hysteria2; do [ -d "$LIB/$d" ] && SVC_PATH="$SVC_PATH:$LIB/$d"; done
 SVC_PATH="$SVC_PATH:/usr/bin:/bin:/usr/sbin:/sbin"
 install -d -m 755 "$LOG_DIR"
-svc_stop
+# AUDIT-FINAL-MACOS M9: a bootout that timed out left the OLD job loaded, and svc_start then kickstarted it (old plist).
+svc_stop || die "the old VPN service did not stop within 30 s, so the new service definition was not loaded. Next: sudo launchctl bootout system/$LABEL, then devnet-dvpn daemon install --yes again"
 cat > "$PLIST.new" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
