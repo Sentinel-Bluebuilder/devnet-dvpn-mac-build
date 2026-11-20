@@ -94,6 +94,10 @@ jobs:
           done
 
       - name: release:mac (arm64)
+        env:
+          # CI has no stable self-signed identity (lead decision): ad hoc sign. The app's Keychain
+          # identity differs from a release-signed build, so this .dmg is test evidence, not an update.
+          DVPN_MAC_ADHOC: '1'
         run: |
           set -o pipefail
           node scripts/release-mac.mjs --arch arm64 --skip-tests --allow-same-version 2>&1 | tee release.log
