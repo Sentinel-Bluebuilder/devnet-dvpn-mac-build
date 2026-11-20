@@ -1,0 +1,118 @@
+# ─── macos-pathb.yml: Path B (Sentinel's own client tools) on Apple silicon macOS ───
+# Owner AC-MAC-4 (#38). Records, as facts, whether the hub's direct/build.sh runs on macos-15,
+# whether darwin-arm64 binaries build from the PUBLIC upstream at the pinned commit, and how far
+# sentinel-dvpnd gets toward a client session. Every step writes evidence; the last step writes
+# pathb-evidence/RESULT.md with PASS / GAP rows. A GAP keeps the exact error text.
+#
+# No chain spend: a paid session (B4) is not run (lead order); its gaps are rc.9 Path B rows.
+name: macos-pathb
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: devnet-chain          # never overlap a chain test with the live job
+  cancel-in-progress: false
+
+jobs:
+  pathb:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      COMMIT: 26de52407c5b722cfecad1772dcbeefd984ef6d0
+      NETWORK: devnet
+      PROGRAM_ID: J52dyXW3a6mkatvrQct3fo6dA9vqUtcsdBt5gGqrTBXs
+      MINT: Hen2LVP6KooGaXEvdSyCHWghsEY4gLLn7wix8z6zHFSa
+      EV: pathb-evidence
+      INSTANCE: c1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache: false
+
+      - name: Facts
+        run: |
+          mkdir -p "$EV"
+          { sw_vers; uname -m; go version; command -v sha256sum || echo 'sha256sum: not on PATH'; command -v ip || echo 'ip: not on PATH'; command -v systemctl || echo 'systemctl: not on PATH'; } | tee "$EV/facts.txt"
+
+      - name: B1 direct/build.sh as shipped refuses macOS (unsupported-os, hub a46338f)
+        continue-on-error: true
+        run: |
+          set +e
+          sh scripts/ci/pathb/build.sh > "$EV/b1.out" 2> "$EV/b1.err"; echo $? > "$EV/b1.rc"
+          tail -n 20 "$EV/b1.err"; cat "$EV/b1.out"; echo "exit $(cat "$EV/b1.rc")"
+
+      - name: B1b VERIFY_ONLY=1 cross-builds the Linux files and compares SHA-256
+        continue-on-error: true
+        run: |
+          set +e
+          VERIFY_ONLY=1 sh scripts/ci/pathb/build.sh > "$EV/b1b.out" 2> "$EV/b1b.err"; echo $? > "$EV/b1b.rc"
+          grep -E '^(MATCH|MISMATCH)' "$EV/b1b.err"; tail -n 1 "$EV/b1b.out"; echo "exit $(cat "$EV/b1b.rc")"
+
+      - name: B2 darwin-arm64 build (same make line, GOOS=darwin)
+        continue-on-error: true
+        run: |
+          set +e
+          [ -d sentinel-solana/.git ] || git clone -q https://github.com/sentinel-official/sentinel-solana sentinel-solana
+          git -C sentinel-solana fetch -q origin && git -C sentinel-solana checkout -q --detach "$COMMIT"
+          rc=0; mkdir -p dist-darwin
+          for tool in sentinel-dvpnd sentinel-dvpn; do
+            env GOOS=darwin GOARCH=arm64 make -C "sentinel-solana/$tool" build \
+              SENTINEL_NETWORK="$NETWORK" SENTINEL_PROGRAM_ID="$PROGRAM_ID" SENTINEL_MINT="$MINT" \
+              >> "$EV/b2.err" 2>&1 || rc=$?
+            cp "sentinel-solana/$tool/bin/$tool" "dist-darwin/$tool-darwin-arm64" 2>> "$EV/b2.err" || rc=1
+          done
+          (cd dist-darwin && shasum -a 256 sentinel-dvpn*) | tee "$EV/b2.sha256"
+          file dist-darwin/* | tee -a "$EV/b2.sha256"
+          ./dist-darwin/sentinel-dvpn-darwin-arm64 version > "$EV/b2-version.out" 2>&1 || rc=1
+          cat "$EV/b2-version.out"
+          echo $rc > "$EV/b2.rc"; tail -n 30 "$EV/b2.err"; echo "exit $rc"
+
+      - name: B3 daemon init + doctor + start (no grant)
+        continue-on-error: true
+        run: |
+          set +e
+          D=./dist-darwin
+          sudo install -m 0755 "$D/sentinel-dvpnd-darwin-arm64" /usr/local/bin/sentinel-dvpnd
+          sudo install -m 0755 "$D/sentinel-dvpn-darwin-arm64" /usr/local/bin/sentinel-dvpn
+          OWNER=$(sentinel-dvpn key new owner --unencrypted 2>"$EV/b3-key.err" | jq -r '.public_key // empty')
+          echo "owner $OWNER" | tee "$EV/b3.out"
+          sudo sentinel-dvpnd init --instance "$INSTANCE" --owner "$OWNER" --plain-key >> "$EV/b3.out" 2>&1; echo "init exit $?" | tee -a "$EV/b3.out"
+          sudo sentinel-dvpnd doctor --instance "$INSTANCE" > "$EV/b3-doctor.out" 2>&1; echo "doctor exit $?" | tee -a "$EV/b3.out"
+          cat "$EV/b3-doctor.out"
+          sudo sentinel-dvpnd run --instance "$INSTANCE" > "$EV/b3-run.out" 2>&1 &
+          PID=$!; sleep 20
+          if sudo kill -0 "$PID" 2>/dev/null; then echo 'run: still running after 20 s' | tee -a "$EV/b3.out"; sudo kill "$PID"; else wait "$PID"; echo "run exit $?" | tee -a "$EV/b3.out"; fi
+          tail -n 30 "$EV/b3-run.out"
+
+      - name: RESULT.md
+        if: always()
+        run: |
+          row() { printf '| %s | %s | %s |\n' "$1" "$2" "$3"; }
+          last() { [ -f "$1" ] && tail -n 1 "$1" | tr '|' '/' | cut -c1-300 || echo 'no output'; }
+          {
+            echo '# Path B on macos-15 (arm64)'; echo; echo '| row | result | exact evidence |'; echo '|---|---|---|'
+            rc=$(cat "$EV/b1.rc" 2>/dev/null || echo none)
+            if [ "$rc" = 1 ] && grep -q '"code":"unsupported-os"' "$EV/b1.out" 2>/dev/null; then r='PASS (refuses: unsupported-os, exit 1)'; else r="DIFFERS (exit $rc, wanted unsupported-os exit 1)"; fi
+            row 'B1 direct/build.sh on macOS' "$r" "$(last "$EV/b1.out")"
+            rc=$(cat "$EV/b1b.rc" 2>/dev/null || echo none)
+            if [ "$rc" = 0 ] && grep -q '"result":"MATCH"' "$EV/b1b.out" 2>/dev/null; then r='PASS (Linux files MATCH direct/SHA256SUMS)'; else r="DIFFERS (exit $rc)"; fi
+            row 'B1b VERIFY_ONLY=1 cross-build' "$r" "$(last "$EV/b1b.out")"
+            rc=$(cat "$EV/b2.rc" 2>/dev/null || echo none); [ "$rc" = 0 ] && r=PASS || r="GAP (exit $rc)"
+            row 'B2 darwin-arm64 build @ 26de5240' "$r" "$(last "$EV/b2-version.out")"
+            grep -q 'still running' "$EV/b3.out" 2>/dev/null && r='PASS (daemon runs)' || r='GAP'
+            row 'B3 sentinel-dvpnd init/doctor/run' "$r" "$(last "$EV/b3-run.out")"
+            row 'G1 build.sh' 'GAP (rc.9)' 'builds Linux only (GOOS=linux, *-linux-* names); since hub a46338f it refuses macOS with unsupported-os'
+            row 'G2 install.sh' 'GAP (rc.9)' 'registers a systemd unit; macOS has launchd'
+            row 'G3 connect.sh' 'GAP (rc.9)' 'step 3 uses ip route, AFTER the step-1 grant tx: a mac run pays, then fails route-failed'
+            row 'G4 daemon preflight' 'GAP (rc.9)' 'sentinel-dvpnd run refuses until an on-chain grant exists (preflight failed: grant)'
+          } | tee "$EV/RESULT.md"
+          cat "$EV/RESULT.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pathb-evidence
+          path: pathb-evidence/

@@ -37,10 +37,10 @@ vi.mock('../../src/main/services/history', () => ({ recordStart: vi.fn(), record
 vi.mock('../../src/main/services/settlement', () => ({ claimForReuse: () => true, settleChannelSoon: vi.fn() }));
 vi.mock('../../src/main/system/proxy', () => ({ setSystemProxy: vi.fn(), clearSystemProxy: async () => undefined }));
 vi.mock('../../src/main/system/tunnels', () => ({
-  leftoverTunnels: async () => { st.removed += 1; return []; },
+  leftoverTunnels: async () => [],
   rivalVpns: async () => [],
   openvpnRunning: async () => false,
-  removeTunnelServices: async () => ({ ok: true }),
+  removeTunnelServices: async () => { st.removed += 1; return { ok: true }; }, // RC9 PF-DEAD: the root sweep that removes orphan tunnels + the kill-switch table
 }));
 vi.mock('../../src/main/system/dns-check', () => ({ dnsReallyLeftOver: async () => false, flushDnsCache: vi.fn() }));
 vi.mock('../../src/core/chain/rpc', () => ({ getRpcUrls: () => [], resetRpcTransport: vi.fn(), onRpcRetry: () => () => undefined }));

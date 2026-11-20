@@ -78,6 +78,14 @@ row_setup() {
   expect setup 0 . "device set up (grant + fee SOL)" "device setup failed"
 }
 
+# rc.8: the plain setup above defaults the allowance to 150 tDVPN and refuses a 60 tDVPN wallet (W91,
+# fixed in rc.9: that row must flip to PASS there). This explicit allowance lets install + doctor run.
+row_setup_allowance() {
+  gap
+  run setup_allowance device setup --allowance "${SETUP_ALLOWANCE:-50}" --yes
+  expect setup_allowance 0 . "device set up with --allowance ${SETUP_ALLOWANCE:-50}" "device setup --allowance ${SETUP_ALLOWANCE:-50} failed"
+}
+
 row_install() {
   run install daemon install --yes
   expect install 0 . "service installed/updated and started" "daemon install failed"
@@ -153,11 +161,16 @@ row_send_system_program() {
 
 row_send_sol_no_fees() {
   run wallet_show wallet show
-  local sol send
-  sol=$(echo "$OUT" | jq -r '[.. | objects | .sol? // empty] | .[0] // empty' 2>/dev/null | grep -Eo '^[0-9.]+' | head -1)
-  send=$(awk -v s="${sol:-0.3}" 'BEGIN{x=s-0.000001; if(x<0.000001)x=0.000001; printf "%.6f", x}')
+  # wallet show --json gives the owner's balance as ownerLamports; send = balance − 1000 lamports,
+  # so the send fits the balance but leaves no SOL for its fee (the refusal under test).
+  local lamports send
+  lamports=$(echo "$OUT" | jq -r '.ownerLamports // empty' 2>/dev/null | grep -Eo '^[0-9]+$' | head -1)
+  if [ -z "$lamports" ] || [ "$lamports" -le 1000 ]; then
+    RC=1; record send_sol_no_fees DIFFERS "no ownerLamports above 1000 in wallet show: $(echo "$OUT" | head -c 200)"; return
+  fi
+  send=$(awk -v l="$lamports" 'BEGIN{printf "%.9f", (l-1000)/1e9}')
   run send_sol_no_fees wallet send --to "$SEND_TO" --sol "$send"
-  expect send_sol_no_fees any 'fees|low-sol-after|allow-empty' "refused: leaves no fee SOL ($send of ${sol:-?})" "SOL send leaving no fees not refused"
+  expect send_sol_no_fees any 'fees|low-sol-after|allow-empty' "refused: leaves no fee SOL ($send of $lamports lamports)" "SOL send leaving no fees not refused ($send of $lamports lamports)"
 }
 
 row_device_plan_above_wallet() {
@@ -201,7 +214,7 @@ write_result() {
 trap cleanup EXIT
 
 # ─── Order ───
-ROWS="version home_ip init setup install doctor up exit_ip status down usage_exit3 send_above_balance send_system_program send_sol_no_fees device_plan_above_wallet keyfile_mode"
+ROWS="version home_ip init setup setup_allowance install doctor up exit_ip status down usage_exit3 send_above_balance send_system_program send_sol_no_fees device_plan_above_wallet keyfile_mode"
 [ -n "${EXTRA_ROWS_FILE:-}" ] && [ -f "$EXTRA_ROWS_FILE" ] && . "$EXTRA_ROWS_FILE"
 ROWS="$ROWS ${EXTRA_ROWS:-}"
 for r in ${ONLY_ROWS:-$ROWS}; do

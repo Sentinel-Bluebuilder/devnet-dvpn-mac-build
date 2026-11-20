@@ -1,0 +1,120 @@
+# ─── verify-release — a clean macOS machine checks every PUBLISHED macOS asset (no build, no chain) ───
+# Fresh macos-15 runner. Downloads the PUBLIC release assets of Sentinel-Bluebuilder/sentinel-solana-dvpn-macos
+# at <tag> with gh (never this repo's build artifacts), then:
+#   1. shasum -a 256 -c SHA256SUMS            every published file matches the published sums
+#   2. hdiutil attach the .dmg, copy the app to /Applications, xattr -dr com.apple.quarantine
+#   3. devnet-dvpn version --json             = the tag's version, devnet network, non-empty program/mint ids
+#   4. codesign -dv                           ad hoc signature (the published app is not notarized)
+#   5. lipo -archs                            every Mach-O in the app is arm64
+#   6. the .zip unpacks to an app whose CLI reports the same version
+# No key, no secret, no money moves.
+name: verify-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag in Sentinel-Bluebuilder/sentinel-solana-dvpn-macos (e.g. v0.3.0-rc8)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  REL_REPO: Sentinel-Bluebuilder/sentinel-solana-dvpn-macos
+  TAG: ${{ inputs.tag }}
+
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Download the published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p rel && cd rel
+          gh release download "$TAG" -R "$REL_REPO"
+          ls -l
+          { echo "### verify-release $REL_REPO@$TAG"; echo '```'; ls -l; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 1. SHA256SUMS
+        working-directory: rel
+        run: |
+          set -euo pipefail
+          test -f SHA256SUMS || { echo "release has no SHA256SUMS"; exit 1; }
+          shasum -a 256 -c SHA256SUMS | tee sums.log
+          # every package on the release must be listed in the sums
+          for f in *.dmg *.zip; do grep -q "  $f\$" SHA256SUMS || { echo "$f is not in SHA256SUMS"; exit 1; }; done
+          echo "- [PASS] SHA256SUMS: $(wc -l < sums.log | tr -d ' ') files OK" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 2. Install from the .dmg
+        run: |
+          set -euo pipefail
+          dmg=$(ls rel/*.dmg | head -1)
+          mnt=$(hdiutil attach -nobrowse -readonly "$dmg" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)
+          test -d "$mnt/Devnet dVPN.app" || { echo "no 'Devnet dVPN.app' on the dmg"; exit 1; }
+          sudo rm -rf "/Applications/Devnet dVPN.app"
+          sudo ditto "$mnt/Devnet dVPN.app" "/Applications/Devnet dVPN.app"
+          hdiutil detach "$mnt"
+          sudo xattr -dr com.apple.quarantine "/Applications/Devnet dVPN.app"
+          echo "- [PASS] dmg mounts, app copied, quarantine removed" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 3. version --json = tag + devnet ids
+        run: |
+          set -euo pipefail
+          want=$(echo "$TAG" | sed -E 's/^v//; s/-rc([0-9])/-rc.\1/')
+          cli="/Applications/Devnet dVPN.app/Contents/Resources/bin/devnet-dvpn"
+          "$cli" version --json > version.json
+          cat version.json
+          jq -e --arg v "$want" '[.. | strings] | any(. == $v)' version.json >/dev/null \
+            || { echo "version --json does not report $want"; exit 1; }
+          jq -e '[.. | strings] | any(test("devnet"; "i"))' version.json >/dev/null \
+            || { echo "version --json names no devnet network"; exit 1; }
+          empty=$(jq -r '[paths(scalars) as $p | select(($p | map(tostring) | join(".")) | test("program|mint"; "i")) | {k: ($p | map(tostring) | join(".")), v: getpath($p)} | select((.v | tostring) == "")] | map(.k) | join(",")' version.json)
+          ids=$(jq -r '[paths(scalars) as $p | select(($p | map(tostring) | join(".")) | test("program|mint"; "i"))] | length' version.json)
+          [ "$ids" -gt 0 ] || { echo "version --json has no program/mint id fields"; exit 1; }
+          [ -z "$empty" ] || { echo "empty id fields: $empty"; exit 1; }
+          echo "- [PASS] version $want, devnet, $ids program/mint ids set" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 4. codesign = ad hoc
+        run: |
+          set -euo pipefail
+          app="/Applications/Devnet dVPN.app"
+          codesign -dv "$app" 2> codesign.txt || true
+          cat codesign.txt
+          grep -Eq 'Signature=adhoc|flags=.*adhoc' codesign.txt || { echo "the app is not ad hoc signed"; exit 1; }
+          # informational: a strict deep verify of an ad hoc bundle is reported, not gated
+          if codesign --verify --deep --strict "$app" 2> verify.txt; then dv='deep verify OK'; else dv="deep verify FAILED: $(head -c 200 verify.txt)"; fi
+          echo "$dv"
+          echo "- [PASS] codesign: ad hoc ($dv)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 5. lipo = arm64 for every Mach-O
+        run: |
+          set -euo pipefail
+          app="/Applications/Devnet dVPN.app"
+          n=0; bad=0
+          while IFS= read -r -d '' f; do
+            if file -b "$f" | grep -q 'Mach-O'; then
+              n=$((n+1)); a=$(lipo -archs "$f" 2>/dev/null || echo '?')
+              [ "$a" = arm64 ] || { echo "NOT arm64 ($a): ${f#$app/}"; bad=$((bad+1)); }
+            fi
+          done < <(find "$app" -type f -print0)
+          echo "$n Mach-O files, $bad not arm64"
+          [ "$n" -gt 0 ] && [ "$bad" = 0 ] || exit 1
+          echo "- [PASS] lipo: $n Mach-O files, all arm64" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 6. The .zip holds the same app
+        run: |
+          set -euo pipefail
+          want=$(echo "$TAG" | sed -E 's/^v//; s/-rc([0-9])/-rc.\1/')
+          zip=$(ls rel/*.zip | head -1)
+          mkdir -p z && ditto -x -k "$zip" z
+          cli=$(find z -path '*Devnet dVPN.app/Contents/Resources/bin/devnet-dvpn' | head -1)
+          test -n "$cli" || { echo "no CLI in the zip's app"; exit 1; }
+          xattr -dr com.apple.quarantine z || true
+          "$cli" version --json | jq -e --arg v "$want" '[.. | strings] | any(. == $v)' >/dev/null \
+            || { echo "zip app does not report $want"; exit 1; }
+          echo "- [PASS] zip app reports $want" >> "$GITHUB_STEP_SUMMARY"

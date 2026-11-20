@@ -1638,6 +1638,17 @@ async function removeOrphanTunnels(sweep = false): Promise<string | null> {
   return r.ok ? null : tr('A VPN tunnel was left running and could not be removed ({detail}). {osWord} to clear it.', { detail: r.detail, osWord: osWord('restart', process.platform) });
 }
 
+/** RC9 PF-DEAD: the root clean-up (tunnels, kill-switch firewall table, DNS) with the daemon not answering. Never throws. */
+async function sweepAfterDeadDaemon(): Promise<void> {
+  try {
+    const r = await removeTunnelServices();
+    if (r?.ok) log.info('restore network: root sweep with the daemon down', { detail: r.detail });
+    else log.warn('restore network: root sweep with the daemon down did not finish', { detail: r?.detail ?? 'no result' });
+  } catch (err) {
+    log.warn('restore network: root sweep with the daemon down failed', { err: (err as Error).message });
+  }
+}
+
 /** "Restore network": stop whatever the daemon holds so it releases kill switch + DNS (F14.3). */
 export async function restoreNetwork(retried = false): Promise<Result> {
   try {
@@ -1670,13 +1681,17 @@ export async function restoreNetwork(retried = false): Promise<Result> {
       if (!re.ok) log.warn('restore network: VPN engine restart failed', { err: re.error });
       return { ok: false, error: re.ok ? ANDROID_ENGINE_RESTARTED_COPY() : ANDROID_ENGINE_DOWN_COPY(), code: 'daemon-unavailable' };
     }
-    await removeOrphanTunnels();
+    // RC9 PF-DEAD (#33 live run 44808199308, pf_restore): after kill -9 of the daemon no leftover LINK showed, so
+    // removeOrphanTunnels() returned before the root step and the kill switch's firewall table (pf anchor + its
+    // attach line) kept blocking everything. A dead daemon always gets the root sweep; it is idempotent.
+    await sweepAfterDeadDaemon();
     // A stopped service is started without elevation (old installs: 'no-right'); once it
     // answers, one more pass releases its kill switch. Same as linux-app 19bff7a7 (C18).
+    // RC9 PF-DEAD: a killed daemon is restarted by launchd/systemd itself ('running'): wait for it and run once more too.
     if (!retried) {
       const svc = await startServiceIfStopped();
       log.info('restore network: service start', { svc });
-      if (svc === 'started' && (await waitForDaemon(SERVICE_WAIT_MS, daemonInfo)).reachable) return restoreNetwork(true);
+      if ((svc === 'started' || svc === 'running') && (await waitForDaemon(SERVICE_WAIT_MS, daemonInfo)).reachable) return restoreNetwork(true);
     }
     return { ok: false, error: tr('The VPN service is not answering. {osWord}, then press Restore network again.', { osWord: osWord('restartService', process.platform) }), code: 'daemon-unavailable' };
   }

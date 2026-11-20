@@ -9,6 +9,7 @@ const st = vi.hoisted(() => ({
   up: false,
   reachable: [] as boolean[],
   starts: 0,
+  sweeps: 0, // RC9 PF-DEAD: root sweeps run while the daemon is down
   state: { session: null as unknown, conn: { phase: 'idle' } as Record<string, unknown>, lastConnectError: null as unknown },
 }));
 vi.mock('../../src/main/app-state', () => ({
@@ -37,7 +38,7 @@ vi.mock('../../src/main/logger', () => ({ log: { warn: vi.fn(), info: vi.fn(), e
 vi.mock('../../src/main/services/history', () => ({ recordStart: vi.fn(), recordEnd: vi.fn() }));
 vi.mock('../../src/main/services/settlement', () => ({ claimForReuse: () => true, settleChannelSoon: vi.fn(), settlesOnEnd: (r: string) => !/switching servers/i.test(r) }));
 vi.mock('../../src/main/system/proxy', () => ({ setSystemProxy: vi.fn(), clearSystemProxy: async () => undefined }));
-vi.mock('../../src/main/system/tunnels', () => ({ restoreNetworkSweep: () => false, openvpnRunning: async () => false, leftoverTunnels: async () => [], rivalVpns: async () => [], removeTunnelServices: async () => undefined }));
+vi.mock('../../src/main/system/tunnels', () => ({ restoreNetworkSweep: () => false, openvpnRunning: async () => false, leftoverTunnels: async () => [], rivalVpns: async () => [], removeTunnelServices: async () => { st.sweeps += 1; return { ok: true, detail: 'removed: kill switch (pf anchor sentinel-dvpn-c0), pf anchor attach line' }; } }));
 vi.mock('../../src/main/system/dns-check', () => ({ dnsReallyLeftOver: async () => false, flushDnsCache: vi.fn() }));
 vi.mock('../../src/core/chain/rpc', () => ({ getRpcUrls: () => [], resetRpcTransport: vi.fn(), onRpcRetry: () => () => undefined }));
 vi.mock('../../src/main/daemon/settings', () => ({ getDaemonSettings: () => ({ settings: { killSwitch: 'off', dnsServers: [] } }), serviceUsesTun: () => false, splitForSession: vi.fn() }));
@@ -48,7 +49,7 @@ vi.mock('../../src/main/services/net-settle', () => ({ waitForDirectPath: async 
 
 const { restoreNetwork } = await import('../../src/main/services/connection');
 
-beforeEach(() => { st.state = { session: null, conn: { phase: 'idle' }, lastConnectError: null }; st.reachable = []; st.starts = 0; st.up = false; });
+beforeEach(() => { st.state = { session: null, conn: { phase: 'idle' }, lastConnectError: null }; st.reachable = []; st.starts = 0; st.sweeps = 0; st.up = false; });
 
 describe('restore network when the VPN service is down', () => {
   it('stopped service: started, waited for, restore runs again and succeeds', async () => {
@@ -70,6 +71,32 @@ describe('restore network when the VPN service is down', () => {
 
   it('started but never answers: restart text, no loop', async () => {
     st.svc = 'started'; st.reachable = [false]; st.up = false;
+    const r = await restoreNetwork();
+    expect(r.code).toBe('daemon-unavailable');
+    expect(st.starts).toBe(1);
+  });
+});
+
+// ─── RC9 PF-DEAD (#33 live run 44808199308, pf_restore): kill -9 of the daemon, then Restore network ───
+// No leftover tunnel link showed, so the root step never ran and the kill switch's pf table kept blocking.
+describe('restore network right after the daemon was killed (RC9 PF-DEAD)', () => {
+  it('daemon dead, no leftover link: the root sweep still runs (it empties the kill-switch firewall table)', async () => {
+    st.svc = 'no-service';
+    await restoreNetwork();
+    expect(st.sweeps).toBe(1);
+  });
+  it('launchd/systemd already restarted it (running): waits, runs once more and succeeds', async () => {
+    st.svc = 'running'; st.reachable = [true]; st.up = true;
+    const first = { done: false };
+    // the first listSessions throws (daemon still coming up); the retry sees it up
+    st.up = false;
+    const r = await (async () => { const p = restoreNetwork(); st.up = true; first.done = true; return p; })();
+    expect(first.done).toBe(true);
+    expect(st.sweeps).toBe(1);
+    expect(r.ok).toBe(true);
+  });
+  it('negative control: running but it never answers: the restart text, no loop', async () => {
+    st.svc = 'running'; st.reachable = [false];
     const r = await restoreNetwork();
     expect(r.code).toBe('daemon-unavailable');
     expect(st.starts).toBe(1);

@@ -25,7 +25,7 @@ import { snapshot } from '../main/app-state';
 import { driversStatus, repairDrivers, driverLines, DRIVER_LABELS, type DriverReport } from '../main/system/drivers';
 import { daemon, daemonInfo, deviceRecord, dvpndPath, runDoctor, initDevice, installService, uninstallService } from '../main/daemon/manager';
 import { launchdState, LAUNCHD_LABEL, LAUNCHD_PLIST } from '../main/daemon/launchd-state';
-import { darwinDoctorRows } from '../core/daemon/darwin-launchd';
+import { darwinDoctorRows, restoreUnavailableNext } from '../core/daemon/darwin-launchd';
 import { isAndroid } from '../shared/is-android';
 import { runHomeMigration } from '../main/daemon/migrate-run';
 import { log } from '../main/logger';
@@ -274,6 +274,9 @@ export const daemonCmd: Cmd = async (a, o) => {
     if (problem) throw cliErr('dns-no-answer', `${CLI_NAME} daemon doctor --json`, problem); // exit 1: scripts can gate on it
   } else if (sub === 'restore-network') {
     const r = await restoreNetwork();
+    // RC9 PF-DEAD (#33 run 44808199308, pf_restore1): the service not answering came back with next:null and
+    // "Restart the Mac". On macOS it is one launchctl line (launchd restarts the daemon), then the restore again.
+    if (!r.ok && r.code === 'daemon-unavailable') throw cliErr('daemon-unavailable', restoreUnavailableNext(process.platform, LAUNCHD_LABEL, CLI_NAME), r.error ?? 'The VPN service is not answering.');
     need(r);
     o.print('Network restored.', r);
   } else if (sub === 'uninstall') {

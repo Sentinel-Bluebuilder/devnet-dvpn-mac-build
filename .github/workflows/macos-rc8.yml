@@ -1,10 +1,13 @@
-# ─── macos-rc8 — rc.8 on real Apple silicon (GitHub macos-14): build + unit tests, then live ───
+# ─── macos-rc8 (version-neutral; file name kept for dispatch) — the package.json version on real Apple
+#     silicon (GitHub macos-15): build + unit tests, then live. rc.9+ = bump #33, export, one dispatch. ───
 # build: npm ci, typecheck, unit tests, release:mac --arch arm64 (unsigned ad hoc: identity null +
 #        build/mac/adhoc-sign.cjs; CSC_IDENTITY_AUTO_DISCOVERY=false), SHA256SUMS, artifacts.
 #        The pinned darwin dvpnd + patched xray (build/deps.lock.json "local") are not in git; they are
 #        taken from the public rc.4 arm64 .zip, built from the same final6.16 (5b0a398). If the shipped
 #        bytes differ from the lock (codesign re-signs Mach-O), this CI checkout's lock is pointed at
 #        the shipped bytes and the run summary says so: daemon = the rc.4-shipped final6.16 bytes.
+#        Guard: if the lock's arm64 dvpnd/xray src is no longer that final6.16/ddv2 pair (a new daemon in
+#        a later rc), the step FAILS instead of shipping the old rc.4 bytes under a new lock.
 # live:  install the .dmg with sudo, link the CLI, run scripts/e2e/mac/gha-live.sh (owned by AC-MAC-2)
 #        with secrets.DVPN_TEST_KEY in a 0600 file; upload evidence/.
 name: macos-rc8
@@ -24,6 +27,8 @@ env:
   RC4_REPO: Sentinel-Bluebuilder/sentinel-solana-dvpn-macos
   RC4_TAG: v0.3.0-rc4
   RC4_ZIP: Devnet-dVPN-0.3.0-rc.4-arm64-mac.zip
+  RC4_DVPND_SRC: sentinel-dvpnd-darwin-arm64-fork-cb33-4-final6.16
+  RC4_XRAY_SRC: xray-darwin-arm64-26.3.27-ddv2
   DVPND_DIR: ${{ github.workspace }}/.ci-dvpnd
   CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
@@ -45,6 +50,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Version (package.json)
+        run: echo "### Devnet dVPN $(jq -r .version package.json) — macOS arm64" >> "$GITHUB_STEP_SUMMARY"
+
       - name: npm ci
         run: npm ci
 
@@ -61,6 +69,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          for pair in "dvpnd:$RC4_DVPND_SRC" "xray:$RC4_XRAY_SRC"; do
+            n=${pair%%:*}; want_src=${pair#*:}
+            have=$(jq -r --arg n "$n" '.local[] | select(.arch=="arm64" and .name==$n) | .src' build/deps.lock.json)
+            [ "$have" = "$want_src" ] || { echo "lock arm64 $n src is '$have', not the rc.4-shipped '$want_src': supply the new build, this binary source no longer applies"; exit 1; }
+          done
           mkdir -p "$DVPND_DIR" /tmp/rc4
           gh release download "$RC4_TAG" -R "$RC4_REPO" -p "$RC4_ZIP" -D /tmp/rc4
           shasum -a 256 "/tmp/rc4/$RC4_ZIP" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -111,7 +124,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-rc8-arm64
+          name: macos-arm64
           if-no-files-found: error
           path: |
             dist/*.dmg
@@ -136,7 +149,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: macos-rc8-arm64
+          name: macos-arm64
           path: pkg
 
       - name: Install the .dmg (sudo)
@@ -167,7 +180,7 @@ jobs:
           key="$RUNNER_TEMP/dvpn-test-key.json"
           printf '%s' "$DVPN_TEST_KEY" > "$key"
           chmod 600 "$key"
-          DVPN_KEYFILE="$key" bash scripts/e2e/mac/gha-live.sh
+          EXPECT_VERSION=$(jq -r .version package.json) DVPN_KEYFILE="$key" bash scripts/e2e/mac/gha-live.sh
 
       - name: Result
         if: always()
@@ -176,7 +189,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: macos-rc8-live-evidence
+          name: macos-live-evidence
           path: evidence/
 
       - name: Remove the key
