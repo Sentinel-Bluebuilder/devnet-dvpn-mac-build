@@ -45,6 +45,7 @@ import { getRpcState } from '../core/chain/rpc';
 import { publicIp, speedTest } from '../core/quality/quality';
 import type { DaemonSettings } from '../core/daemon/config';
 import { log, tailLog, redactUrls } from './logger';
+import { uiSmokeEnv } from './dev/hooks';
 import { ShownError, shownMessage, tr } from '../shared/i18n';
 
 type Handler = (payload: never) => Promise<unknown> | unknown;
@@ -184,7 +185,7 @@ export const HANDLERS: Record<IpcChannel, Handler> = {
     const win = BrowserWindow.getFocusedWindow();
     // UI test runs only (uifire export-csv): the save dialog cannot be driven under Xvfb, so the
     // test names the file. Never set outside DVPN_UI_SMOKE.
-    const testPath = process.env.DVPN_UI_SMOKE ? process.env.DVPN_UI_SAVE_PATH : undefined;
+    const testPath = uiSmokeEnv(app.isPackaged) ? process.env.DVPN_UI_SAVE_PATH : undefined; // K-M4-5: a release build ignores it
     const r = testPath ? { canceled: false, filePath: testPath }
       : await (win ? dialog.showSaveDialog(win, { defaultPath: 'devnet-dvpn-history.csv' }) : dialog.showSaveDialog({ defaultPath: 'devnet-dvpn-history.csv' }));
     if (r.canceled || !r.filePath) return { ok: false, code: 'cancelled', error: 'Cancelled.' };
@@ -222,7 +223,7 @@ export const HANDLERS: Record<IpcChannel, Handler> = {
     const opts = { title: tr('Import a key file'), properties: ['openFile' as const], filters: [{ name: tr('Key file'), extensions: ['json'] }] };
     // UI test runs only (uifire signout): the open dialog cannot be driven under Xvfb, and the key
     // must not pass through the scenario text. Never set outside DVPN_UI_SMOKE.
-    const testPath = process.env.DVPN_UI_SMOKE ? process.env.DVPN_UI_OPEN_PATH : undefined;
+    const testPath = uiSmokeEnv(app.isPackaged) ? process.env.DVPN_UI_OPEN_PATH : undefined; // K-M4-5: a release build ignores it
     const r = testPath ? { canceled: false, filePaths: [testPath] }
       : await (win ? dialog.showOpenDialog(win, opts) : dialog.showOpenDialog(opts));
     if (r.canceled || !r.filePaths[0]) return { ok: false, code: 'cancelled', error: 'Cancelled.' };

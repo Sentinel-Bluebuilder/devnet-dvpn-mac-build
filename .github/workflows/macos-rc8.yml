@@ -29,8 +29,18 @@ env:
   RC4_ZIP: Devnet-dVPN-0.3.0-rc.4-arm64-mac.zip
   RC4_DVPND_SRC: sentinel-dvpnd-darwin-arm64-fork-cb33-4-final6.16
   RC4_XRAY_SRC: xray-darwin-arm64-26.3.27-ddv2
+  # #33 audit M1 (rc.9): the ONLY bytes the CI lock override may take (the rc.4-shipped, signed final6.16 dvpnd + xray;
+  # hub tests/walk/macos-rc7-deps.md). Anything else in the rc.4 zip fails the build.
+  RC4_DVPND_SHA: cfc3781087c96fb2174b4a334e12b19d99ff1b32420dcd7e46ab20d01a60f3d1
+  RC4_XRAY_SHA: 3daa86e2b427bbf85426555a500fcbba2d96f4674ca78f80dad3c22836fafbd5
   DVPND_DIR: ${{ github.workspace }}/.ci-dvpnd
   CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+# #33 audit M2 (rc.9): GitHub runs a bare `run:` as `bash -e {0}`, so a failing command before a pipe (`… | tee`) did not
+# fail the step (a type error passed the build). `shell: bash` = `bash --noprofile --norc -eo pipefail {0}`.
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build:
@@ -96,7 +106,14 @@ jobs:
                 cp /tmp/rc4/unsigned "$DVPND_DIR/$src"; got=$ug
                 echo "- $name: lock match after codesign --remove-signature ($got)" >> "$GITHUB_STEP_SUMMARY"
               else
-                # CI-only lock override: the bytes users run today in rc.4 (same final6.16 build).
+                # CI-only lock override: the bytes users run today in rc.4 (same final6.16 build), and ONLY those.
+                # #33 audit M1: before, any bytes in the downloaded zip became the lock; now they must equal the pin.
+                case "$name" in dvpnd) pin="$RC4_DVPND_SHA" ;; xray) pin="$RC4_XRAY_SHA" ;; *) pin='' ;; esac
+                if [ -z "$pin" ] || [ "$got" != "$pin" ]; then
+                  echo "$name in the rc.4 zip is $got, not the pinned rc.4 bytes ${pin:-none} (lock $want, unsigned $ug): refusing to build"
+                  echo "- $name: **REFUSED** — rc.4 zip bytes $got are not the pinned ${pin:-none}" >> "$GITHUB_STEP_SUMMARY"
+                  exit 1
+                fi
                 jq --arg n "$name" --arg s "$got" '(.local[] | select(.arch=="arm64" and .name==$n) | .sha256) = $s' \
                   build/deps.lock.json > /tmp/lock.json && mv /tmp/lock.json build/deps.lock.json
                 echo "- $name: **CI lock override** — daemon/xray = the rc.4-shipped final6.16 bytes, sha256 $got (lock pinned $want; unsigned $ug)" >> "$GITHUB_STEP_SUMMARY"

@@ -1,9 +1,0 @@
-bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
-(node:69661) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-(Use `devnet-dvpn-desktop --trace-deprecation ...` to show where the warning was created)
-[2026-10-21T15:17:43.681Z] info  app start {"version":"0.1.0","packaged":true}
-[2026-10-21T15:17:43.805Z] info  ipc registered {"channels":51,"daemon":false}
-[69699:1021/151744.105185:ERROR:components/viz/service/main/viz_main_impl.cc:189] Exiting GPU process due to errors during initialization
-[2026-10-21T15:17:44.601Z] info  daemon attached {"version":"cf4c372-ddv1","network":"devnet","networkOk":true}
-[69763:1021/151745.049594:ERROR:components/viz/service/main/viz_main_impl.cc:189] Exiting GPU process due to errors during initialization
-[69794:1021/151745.359265:ERROR:components/viz/service/main/viz_main_impl.cc:189] Exiting GPU process due to errors during initialization

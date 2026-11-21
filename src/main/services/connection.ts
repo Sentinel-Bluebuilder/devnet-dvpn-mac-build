@@ -125,6 +125,15 @@ export function priceRaised(escrow: string, shown: string | undefined): boolean 
   if (!shown || !/^\d+$/.test(shown)) return false;
   return BigInt(escrow) > BigInt(shown);
 }
+/**
+ * U-M4-1 (rc9-c2): a NEW deposit above zero that no shown amount came with. The Connect sheet sends none when it
+ * offers an open deposit ("nothing new is paid"); when that deposit is gone by the time connect() looks, paying a
+ * new one would spend an amount nobody saw. True = refuse, nothing paid.
+ */
+export function newDepositUnseen(escrow: string, shown: string | undefined): boolean {
+  if (!/^\d+$/.test(String(escrow)) || BigInt(escrow) === 0n) return false;
+  return !shown || !/^\d+$/.test(shown);
+}
 /** L-36: what the Reconnecting screen says under its title. It said "The daemon is retrying the connection.", a word the app never shows. */
 export const RETRYING_DETAIL = (): string => tr('The VPN service is reconnecting to the server.');
 /** CODE-AUDIT E3: a reused deposit the server refused. Nothing new is paid without the user seeing the price. */
@@ -432,6 +441,8 @@ async function testConnect(req: ConnectRequest, hooks: ConnectHooks): Promise<Re
     const open = found && claimForReuse(found) ? found : null;
     // CODE-AUDIT U-15: a price raised mid-run never pays more than the run planned.
     if (!open && priceRaised(cost.escrow, req.shownEscrow)) { testRun = null; return no(PRICE_CHANGED_COPY(), 'price-changed'); }
+    // U-M4-1: a job planned with no new deposit never pays one.
+    if (!open && newDepositUnseen(cost.escrow, req.shownEscrow)) { testRun = null; return no(DEPOSIT_UNUSABLE_COPY(), 'deposit-unusable'); }
     if (open) { reused = true; deposit = open; }
     const before = new Set(await listed());
     let s: DaemonSession;
@@ -667,6 +678,12 @@ async function connectTo(req: ConnectRequest): Promise<Result<LiveSession>> {
       if (!reuse && priceRaised(cost.escrow, req.shownEscrow)) {
         log.info('price went up since the list was read; nothing paid', { node: req.node, shown: req.shownEscrow, now: cost.escrow });
         return fail(PRICE_CHANGED_COPY(), 'price-changed', 'Connect again', req.node);
+      }
+      // U-M4-1: a new deposit is paid only at an amount that was shown (the sheet offered a deposit that is gone now).
+      if (!reuse && newDepositUnseen(cost.escrow, req.shownEscrow)) {
+        log.info('a new deposit with no shown amount; nothing paid', { node: req.node, now: cost.escrow });
+        void readSettlements().catch((e: unknown) => log.warn('settlements refresh after an unseen deposit failed', { err: (e as Error).message }));
+        return fail(DEPOSIT_UNUSABLE_COPY(), 'deposit-unusable', 'Connect again', req.node);
       }
       cred = reuse ? { channel: reuse } : { newChannel: { mode, escrow: cost.escrow } };
       patch({ conn: viewFor(reuse ? 'connecting' : 'paying', reuse ? tr('Using your existing deposit with this server…') : tr('Paying deposit {escrowText}…', { escrowText: cost.escrowText })) });

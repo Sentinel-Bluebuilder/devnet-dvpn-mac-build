@@ -67,7 +67,9 @@ vi.mock('../../src/main/services/connect-marker', () => ({
 
 const { connect, DEPOSIT_UNUSABLE_COPY, PRICE_CHANGED_COPY, priceRaised, txGapMs } = await import('../../src/main/services/connection');
 const { connectActionButton } = await import('../../src/shared/connect-action');
-const req = { node: 'NodeA', basis: 'per_gb' as const, units: 1, confirmed: true as const };
+// U-M4-1 (rc9-c2): every caller that opens a new deposit sends the amount it showed; a shown amount at or above
+// the fresh one never blocks (priceRaised), so the fixtures send one well above the mocked price.
+const req = { node: 'NodeA', basis: 'per_gb' as const, units: 1, confirmed: true as const, shownEscrow: '1000000000000000' };
 const isNew = (c: unknown): boolean => !!c && typeof c === 'object' && 'newChannel' in c;
 
 beforeEach(() => {
@@ -171,10 +173,11 @@ describe('U-13/U-15: a price raised after the list was read is never paid withou
     expect(st.starts).toHaveLength(0);
     expect(r.code).toBe('price-changed');
   });
-  it('negative control: the shown deposit equals the fresh one, or none was sent: the deposit is paid', async () => {
+  it('negative control: the shown deposit equals the fresh one: paid; none was sent: refused, nothing paid (U-M4-1)', async () => {
     await connect({ ...req, shownEscrow: escrow });
-    await connect(req);
-    expect(st.starts.filter(isNew)).toHaveLength(2);
+    const none = await connect({ ...req, shownEscrow: undefined });
+    expect(st.starts.filter(isNew)).toHaveLength(1);
+    expect(none.code).toBe('deposit-unusable');
   });
   it('negative control: a reused deposit pays nothing new, so a shown value never blocks it', async () => {
     st.reuse = 'ChOld';

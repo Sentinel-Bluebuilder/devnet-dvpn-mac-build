@@ -1,2 +1,0 @@
-Connected. Session d1d6d83f-23ea-4926-ae48-d39f3e865efe  v2ray  SOCKS 127.0.0.1:1080
-connect=0

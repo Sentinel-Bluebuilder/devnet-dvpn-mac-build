@@ -270,7 +270,8 @@ export const daemonCmd: Cmd = async (a, o) => {
     confirm(a, o, `${isAndroid() ? 'Apply these settings and restart the VPN engine' : 'Apply service settings and restart it (one administrator prompt)'}${live ? '. This ENDS the current VPN session; connect again after' : ''}:\n${JSON.stringify(shownNext, null, 2)}`);
     // Q0508: the one apply path the app's buttons use too (lock, checks, session end, system proxy back).
     const r = await applyServiceSettings(next);
-    if (!r.ok) throw r.code === 'invalid-daemon-setting' ? new UsageError(r.error ?? 'Invalid setting.') : new Error(r.error);
+    // A16 (rc9-c2): the apply's own code (apply-busy, apply-while-connecting, apply-failed) reaches the agent.
+    if (!r.ok) throw r.code === 'invalid-daemon-setting' ? new UsageError(r.error ?? 'Invalid setting.') : cliErr(r.code ?? 'apply-failed', `${CLI_NAME} agent status --json`, r.error ?? 'Applying the service settings failed.');
     o.print(r.sessionEnded ? 'Applied and restarted. The VPN session ended with the restart: connect again.' : 'Applied and restarted.', r);
   } else if (sub === 'dns-check') {
     // Same probe as the Settings DNS picker: --dns preset|ip,ip, or the service's current servers.

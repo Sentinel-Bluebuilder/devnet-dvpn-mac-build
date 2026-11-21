@@ -189,6 +189,97 @@ row_wallet_switch() {
   else record wallet_switch DIFFERS "up_b=$upb device_b='$devb' (was '$dev0') install_a=$back up_a=$upa (see switch.out, sw_up_b.out)"; fi
 }
 
+# ─── C1 / C2 (AC-MAC-1 P2-1 / P2-2) by behaviour, as root: a planted link is refused, its target untouched ───
+# The darwin unit tests only grep the script text (AC-BLIND). Here the SHIPPED scripts run as root against a test
+# instance home "$SVC_ROOT/c9" (never c0: both refusals come before any service stop or write to the real home).
+SVC_ROOT=${SVC_ROOT:-/Library/Application Support/sentinel-dvpn}
+SCRIPTS=${SCRIPTS:-$APP/Contents/Resources/resources/scripts}
+sha_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
+result_detail() { jq -r '.detail // .status // empty' "$1" 2>/dev/null; }
+row_c1_setup_links() {
+  local dvpnd w tgt t0 t1 res1 res2 rc1 rc2 d1 d2 home="$SVC_ROOT/c9"
+  dvpnd=$(find "$APP/Contents/Resources/resources" -name sentinel-dvpnd -type f 2>/dev/null | head -1)
+  [ -n "$dvpnd" ] || { RC=1; record c1_setup_links DIFFERS "no sentinel-dvpnd in $APP"; return; }
+  sudo -n test -e "$home" && { RC=1; record c1_setup_links DIFFERS "test home $home already exists; not touching it"; return; }
+  w=$(mktemp -d "$HOME/c1.XXXXXX"); tgt="$w/target.txt"; echo "root must never write here" >"$tgt"; t0=$(sha_of "$tgt")
+  # (a) a link INSIDE the staged home (device.pub -> the target)
+  mkdir -p "$w/a/daemon-staging"; echo 'owner = "x"' >"$w/a/daemon-staging/config.toml"; ln -s "$tgt" "$w/a/daemon-staging/device.pub"
+  res1=$(mktemp "$w/r1.XXXXXX")
+  sudo -n /bin/bash "$SCRIPTS/setup-daemon.sh" --Dvpnd "$dvpnd" --Staging "$w/a/daemon-staging" --DaemonHome "$home" \
+    --BinRoot "$(dirname "$dvpnd")" --Group sentinel-dvpn --Service sentinel-dvpnd --Instance c9 --User "$(id -un)" --Result "$res1" >"$EV/c1_a.out" 2>&1; rc1=$?
+  d1=$(result_detail "$res1")
+  # (b) the staging folder itself is a link (to a folder holding a config)
+  mkdir -p "$w/real/daemon-staging"; echo 'owner = "x"' >"$w/real/daemon-staging/config.toml"; mkdir -p "$w/b"; ln -s "$w/real/daemon-staging" "$w/b/daemon-staging"
+  res2=$(mktemp "$w/r2.XXXXXX")
+  sudo -n /bin/bash "$SCRIPTS/setup-daemon.sh" --Dvpnd "$dvpnd" --Staging "$w/b/daemon-staging" --DaemonHome "$home" \
+    --BinRoot "$(dirname "$dvpnd")" --Group sentinel-dvpn --Service sentinel-dvpnd --Instance c9 --User "$(id -un)" --Result "$res2" >"$EV/c1_b.out" 2>&1; rc2=$?
+  d2=$(result_detail "$res2")
+  t1=$(sha_of "$tgt")
+  sudo -n rm -rf -- "$home"; rm -rf -- "$w"
+  { echo "a: rc=$rc1 detail=$d1"; echo "b: rc=$rc2 detail=$d2"; echo "target sha before=$t0 after=$t1"; } >>"$EV/c1_setup_links.out"
+  RC=$rc1
+  if [ "$rc1" != 0 ] && echo "$d1" | grep -q 'holds a symbolic link' && [ "$rc2" != 0 ] && echo "$d2" | grep -q 'unsafe staging folder' && [ "$t0" = "$t1" ]; then
+    record c1_setup_links PASS "link in the staged home refused ('$d1'); linked staging folder refused ('$d2'); target sha256 unchanged"
+  else record c1_setup_links DIFFERS "a rc=$rc1 '$d1'; b rc=$rc2 '$d2'; target before=$t0 after=$t1 (see c1_setup_links.out)"; fi
+}
+row_c2_apply_link() {
+  local w tgt t0 t1 c0 c1 res rc d home="$SVC_ROOT/c9"
+  sudo -n test -e "$home" && { RC=1; record c2_apply_link DIFFERS "test home $home already exists; not touching it"; return; }
+  sudo -n mkdir -p "$home" && echo 'owner = "test-home"' | sudo -n tee "$home/config.toml" >/dev/null
+  c0=$(sudo -n shasum -a 256 "$home/config.toml" | cut -d' ' -f1)
+  w=$(mktemp -d "$HOME/c2.XXXXXX"); tgt="$w/target.txt"; echo "root must never read this into a config" >"$tgt"; t0=$(sha_of "$tgt")
+  mkdir -p "$w/staged"; ln -s "$tgt" "$w/staged/config.toml"
+  res=$(mktemp "$w/r.XXXXXX")
+  sudo -n /bin/bash "$SCRIPTS/apply-daemon-config.sh" --Staged "$w/staged" --DaemonHome "$home" --Result "$res" >"$EV/c2.out" 2>&1; rc=$?
+  d=$(result_detail "$res"); t1=$(sha_of "$tgt"); c1=$(sudo -n shasum -a 256 "$home/config.toml" | cut -d' ' -f1)
+  sudo -n rm -rf -- "$home"; rm -rf -- "$w"
+  { echo "rc=$rc detail=$d"; echo "target sha before=$t0 after=$t1"; echo "test config sha before=$c0 after=$c1"; } >>"$EV/c2_apply_link.out"
+  RC=$rc
+  if [ "$rc" != 0 ] && echo "$d" | grep -q 'not a plain file' && [ "$t0" = "$t1" ] && [ "$c0" = "$c1" ]; then
+    record c2_apply_link PASS "a linked staged config.toml refused ('$d'); link target and the home's config.toml unchanged (sha256)"
+  else record c2_apply_link DIFFERS "rc=$rc '$d'; target $t0→$t1; config $c0→$c1 (see c2_apply_link.out)"; fi
+}
+
+# ─── A1 / A2: the hub's INSTALL-BY-HAND macOS block (docs/INSTALL-BY-HAND.md), checksum first, then install ───
+# The block as published, word for word, except the destination: "$HB_APPS/Devnet dVPN.app" in place of
+# /Applications (the CI-built rc.9 app there runs the other rows). Negative control: a tampered dmg from a local
+# mirror must print "checksum mismatch: install nothing" and install nothing.
+HB_RELEASE=${HB_RELEASE:-v0.3.0-rc8}
+hand_block() { # hand_block <U> <apps dir>: lines 29-43 of the page, /Applications -> $2
+  local U=$1 HB_APPS=$2 A F M
+  A=x64; [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ] && A=arm64
+  curl -fsSLO "$U/SHA256SUMS"
+  F=$(awk '{print $2}' SHA256SUMS | grep -E "^Devnet-dVPN-.*-$A\.dmg\$")
+  if [ -z "$F" ]; then echo "no $A build in this release (Intel Macs: docs/OLDER-RELEASES.md)"
+  elif ! curl -fsSLO "$U/$F"; then echo "download failed: install nothing"
+  elif ! grep " $F\$" SHA256SUMS | shasum -a 256 -c -; then echo "checksum mismatch: install nothing"
+  else
+  M=$(hdiutil attach -nobrowse -readonly "./$F" | tail -1 | cut -f3-)
+  sudo -n ditto "$M/Devnet dVPN.app" "$HB_APPS/Devnet dVPN.app"
+  hdiutil detach -quiet "$M"
+  sudo -n xattr -dr com.apple.quarantine "$HB_APPS/Devnet dVPN.app"
+  export PATH="$HB_APPS/Devnet dVPN.app/Contents/Resources/bin:$PATH"
+  brew install wireguard-tools wireguard-go openvpn bash
+  fi
+}
+row_install_by_hand() {
+  local w ok_out bad_out v f
+  w=$(mktemp -d "$HOME/hb.XXXXXX"); mkdir -p "$w/good" "$w/apps" "$w/mirror" "$w/bad" "$w/apps-bad"
+  (cd "$w/good" && hand_block "https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-macos/releases/download/$HB_RELEASE" "$w/apps") >"$EV/hand_good.out" 2>&1
+  ok_out=$(cat "$EV/hand_good.out")
+  v=$("$w/apps/Devnet dVPN.app/Contents/Resources/bin/devnet-dvpn" version --json 2>/dev/null | jq -r '.. | strings | select(test("^0\\.3\\.0"))' 2>/dev/null | head -1)
+  # negative control: the same SHA256SUMS, a dmg with one byte appended
+  f=$(ls "$w/good"/Devnet-dVPN-*.dmg 2>/dev/null | head -1)
+  if [ -n "$f" ]; then cp "$w/good/SHA256SUMS" "$w/mirror/"; cp "$f" "$w/mirror/"; printf x >>"$w/mirror/$(basename "$f")"; fi
+  (cd "$w/bad" && hand_block "file://$w/mirror" "$w/apps-bad") >"$EV/hand_bad.out" 2>&1
+  bad_out=$(cat "$EV/hand_bad.out")
+  RC=0
+  if echo "$ok_out" | grep -q ': OK$' && [ -n "$v" ] && echo "$bad_out" | grep -q 'checksum mismatch: install nothing' && [ ! -e "$w/apps-bad/Devnet dVPN.app" ]; then
+    record install_by_hand PASS "$HB_RELEASE: checksum OK then installed (devnet-dvpn version $v); tampered dmg: 'checksum mismatch: install nothing', nothing installed"
+  else RC=1; record install_by_hand DIFFERS "good: $(echo "$ok_out" | grep -E ': OK$|mismatch|failed|no ' | head -1) version='$v'; tampered: $(echo "$bad_out" | grep -E 'mismatch|OK$' | head -1) (see hand_good.out, hand_bad.out)"; fi
+  sudo -n rm -rf -- "$w"
+}
+
 # ─── GUI smoke: the app opens, a window with its title, a screenshot ───
 row_gui_smoke() {
   open "$APP" >"$EV/gui_open.out" 2>&1; RC=$?
@@ -206,4 +297,4 @@ row_gui_smoke() {
   else record gui_smoke DIFFERS "open rc=$RC alive=$alive windows='$title' png=$png bytes (see gui_open.out)"; fi
 }
 
-ROWS="$ROWS doctor_rows launchd_print launchd_stopped clock_skew pf_restore wallet_switch gui_smoke"
+ROWS="$ROWS doctor_rows c1_setup_links c2_apply_link launchd_print launchd_stopped clock_skew pf_restore wallet_switch gui_smoke install_by_hand"

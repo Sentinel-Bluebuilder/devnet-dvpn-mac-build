@@ -23,7 +23,8 @@
     "build:cli": "node scripts/build-cli.mjs",
     "cli": "node out/cli/devnet-dvpn.cjs",
     "docs:cli": "node scripts/gen-cli-doc.mjs",
-    "package:mac": "electron-vite build && npm run build:cli && electron-builder --mac",
+    "package:mac": "electron-vite build && node scripts/check-dev-hooks-payload.mjs && npm run build:cli && electron-builder --mac",
+    "check:dev-hooks": "node scripts/check-dev-hooks-payload.mjs",
     "release:mac": "node scripts/release-mac.mjs"
   },
   "dependencies": {

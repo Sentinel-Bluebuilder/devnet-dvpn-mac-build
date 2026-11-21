@@ -1,5 +1,5 @@
 # ─── direct/soltx.py: build one Solana transaction message for openssl to sign (standard library only) ───
-# (vendored copy of Desktop/sentinel-agent-connect-solana direct/soltx.py @ fccf935, unchanged; used by gha-live.sh to sweep the runner device)
+# (vendored copy of the Agentic Privacy hub direct/soltx.py @ fccf935, unchanged; used by gha-live.sh to sweep the runner device)
 #
 #   python3 -I direct/soltx.py <keyfile> <signer address> <blockhash> <work dir> <signer pem> sol <to> <lamports>
 #   python3 -I direct/soltx.py <keyfile> <signer address> <blockhash> <work dir> <signer pem> \

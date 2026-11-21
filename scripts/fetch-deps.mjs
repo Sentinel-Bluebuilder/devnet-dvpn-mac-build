@@ -5,7 +5,7 @@
 //   zip → only the listed `files` into `dest` (`exec` ones made executable)
 // Only the entries for ONE architecture are used (resources/bin holds one arch at a time; the
 // release script packages x64 and arm64 in two passes). Local binaries (dvpnd) are copied from
-// DVPND_DIR/<src> (default Desktop/devnet-dvpn-dvpnd-devnet/build, the darwin cf4c372-ddv4 builds,
+// DVPND_DIR/<src> (default: the dvpnd build folder in the home directory, see DVPND_DIR below; the darwin cf4c372-ddv4 builds,
 // same commit as #31's dvpnd.exe) and must match their pinned SHA-256. Also writes
 // THIRD-PARTY-NOTICES.txt and the package license text.
 // Usage: node scripts/fetch-deps.mjs [--arch x64|arm64] [--offline]   (default arch = this machine)

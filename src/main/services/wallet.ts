@@ -1,7 +1,8 @@
 // ─── Wallet actions (F2.4–F2.6, F3) ───
 import { deviceLimitFor, firstSetupLimit } from '../../core/session/device-limit';
 import { PublicKey, SystemProgram, type TransactionInstruction } from '@solana/web3.js';
-import { TOKEN_2022_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createTransferCheckedInstruction } from '@solana/spl-token';
+import { TOKEN_2022_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createTransferCheckedInstruction, getAccountLenForMint, getMint } from '@solana/spl-token';
+import { rpcCall } from '../../core/chain/rpc';
 import type { Result, WalletStatus } from '../../shared/types';
 import { readWalletStatus, lowFundsWarnings } from '../../core/app/wallet-status';
 import { planDeviceSetup, runDeviceSetup, revokeDevice, sameKeyMessage, autoSetupDecision, needsPermission, ownerSolForSetup, type SetupPlan, type DeviceAutoState } from '../../core/app/device-setup';
@@ -278,6 +279,22 @@ export async function revokeOtherDevice(other: string): Promise<Result<string>> 
   } catch (err) {
     return { ok: false, error: errText(err), code: 'revoke-failed' };
   }
+}
+
+/**
+ * A22 (rc9-c2): what the sender pays to create `to`'s tDVPN account in transferInstructions (its
+ * createAssociatedTokenAccountIdempotent): 0 when the account exists, else the rent-exempt minimum for the size
+ * the mint needs (Token-2022, extensions included). A failed read throws: nothing is previewed on a guess.
+ */
+export async function recipientTokenRent(
+  to: string,
+  deps: { exists?: (addr: PublicKey) => Promise<boolean>; accountLen?: () => Promise<number>; rentFor?: (len: number) => Promise<number> } = {},
+): Promise<bigint> {
+  const exists = deps.exists ?? ((addr: PublicKey) => rpcCall((c) => c.getAccountInfo(addr, 'confirmed'), { label: 'send:recipient-ata' }).then((x) => x !== null));
+  if (await exists(ata(new PublicKey(to)))) return 0n;
+  const accountLen = deps.accountLen ?? (() => rpcCall((c) => getMint(c, MINT, 'confirmed', TOKEN_2022_PROGRAM_ID), { label: 'send:mint' }).then(getAccountLenForMint));
+  const rentFor = deps.rentFor ?? ((len: number) => rpcCall((c) => c.getMinimumBalanceForRentExemption(len, 'confirmed'), { label: 'send:rent' }));
+  return BigInt(await rentFor(await accountLen()));
 }
 
 export function transferInstructions(from: PublicKey, to: PublicKey, tdvpnBase: bigint, lamports: bigint): TransactionInstruction[] {

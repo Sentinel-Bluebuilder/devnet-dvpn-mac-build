@@ -138,8 +138,12 @@ export function cliKeyStore(dataDir: string, keyfile?: string): KeyStore {
 /** A path as one shell word: unchanged when it is plain, else single-quoted (macOS key files often sit under
  *  "~/Library/Application Support", and an unquoted chmod there runs on two wrong paths). AC-MAC-3, #33 3b64e34c5. */
 export const shellWord = (p: string): string => (/^[A-Za-z0-9_./@%+:=-]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`);
+// L4 (rc9-c2, AC-WIN w11): /inheritance:r drops only inherited ACEs and /grant:r replaces only this account's grant, so
+// an EXPLICIT Users / Authenticated Users / Everyone ACE survived and this next looped. /remove:g takes out every group
+// keyfileModeProblem refuses (OPEN_ACE), by SID, in the same one command.
+export const WIN_OPEN_GROUP_SIDS = ['*S-1-1-0', '*S-1-5-11', '*S-1-5-32-545'] as const;
 export const keyfileModeNext = (file: string, platform: string = process.platform, account: string = windowsAccount()): string => platform === 'win32'
-  ? `icacls "${file}" /inheritance:r /grant:r "${account}:F", then ${CLI_NAME} agent up --yes`
+  ? `icacls "${file}" /inheritance:r /remove:g ${WIN_OPEN_GROUP_SIDS.join(' ')} /grant:r "${account}:F", then ${CLI_NAME} agent up --yes`
   : `chmod 600 ${shellWord(file)}, then ${CLI_NAME} agent up --yes`;
 
 /** K-WIN (#38 rc.9): reads a file's ACL on Windows. Injected in tests. */

@@ -462,8 +462,9 @@ export async function runScenario(win: BrowserWindow, dir: string, steps: string
     } catch (err) {
       detail = `step crashed: ${(err as Error).message}`;
     }
-    const v = await visible().catch(() => []);
-    await shot(`s${String(i).padStart(2, '0')}-${name}`).catch(() => undefined);
+    // K-M4-5: these failures were swallowed; a step's record now says when its screen could not be read.
+    const v = await visible().catch((err: Error) => { console.warn(`[ui-scenario] step ${i} ${name}: reading the screen failed: ${err.message}`); return [`(screen not read: ${err.message})`]; });
+    await shot(`s${String(i).padStart(2, '0')}-${name}`).catch((err: Error) => console.warn(`[ui-scenario] step ${i} ${name}: screenshot failed: ${err.message}`));
     out.push({ step: raw, ok, detail, visible: v });
     fs.writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify(out, null, 2));
   }

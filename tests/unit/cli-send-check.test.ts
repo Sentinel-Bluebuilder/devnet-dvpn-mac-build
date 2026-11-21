@@ -40,7 +40,7 @@ describe('W-A2: refusals, each before needsConfirm', () => {
 describe('W-A2: the preview', () => {
   it('adds feeLamports + balanceAfter', () => {
     const r = sendCheck({ ...base, lamports: 10_000_000n, tdvpnBase: 1_000_000n });
-    expect(r).toEqual({ ok: true, feeLamports: '5000', balanceAfter: { lamports: String(100_000_000 - 10_000_000 - 5000), tdvpnBase: '4000000' }, notes: [] });
+    expect(r).toEqual({ ok: true, feeLamports: '5000', rentLamports: '0', balanceAfter: { lamports: String(100_000_000 - 10_000_000 - 5000), tdvpnBase: '4000000' }, notes: [] });
   });
   it('own address and own device: notes, not refusals', () => {
     expect((sendCheck({ ...base, to: OWNER, tdvpnBase: 1n }) as { notes: string[] }).notes[0]).toMatch(/your own address: only the fee/);

@@ -27,7 +27,7 @@ describe('K-WIN: the key file ACL on win32', () => {
     expect(keyfileModeProblem(F, 'win32', undefined, () => { throw new Error('spawn icacls ENOENT'); })).toBeNull();
   });
   it('next: only you on Windows, chmod elsewhere', () => {
-    expect(keyfileModeNext(F, 'win32', 'PC\\alice')).toBe(`icacls "${F}" /inheritance:r /grant:r "PC\\alice:F", then devnet-dvpn agent up --yes`); // KWIN-USER
+    expect(keyfileModeNext(F, 'win32', 'PC\\alice')).toBe(`icacls "${F}" /inheritance:r /remove:g *S-1-1-0 *S-1-5-11 *S-1-5-32-545 /grant:r "PC\\alice:F", then devnet-dvpn agent up --yes`); // KWIN-USER, L4
     expect(keyfileModeNext('/k.json', 'linux')).toBe('chmod 600 /k.json, then devnet-dvpn agent up --yes');
   });
 });

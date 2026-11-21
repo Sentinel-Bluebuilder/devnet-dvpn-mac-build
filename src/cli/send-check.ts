@@ -21,11 +21,14 @@ export interface SendCheckInput {
   programId: string;
   mint: string;
   allowEmpty: boolean;
+  /** A22: lamports the sender pays to create the recipient's tDVPN account (0 or absent when it exists). Counted
+   *  only for a tDVPN send (recipientTokenRent in main/services/wallet.ts). */
+  recipientRentLamports?: bigint;
 }
 
 export type SendCheck =
   | { ok: false; code: 'insufficient-funds' | 'bad-recipient' | 'low-sol-after'; message: string }
-  | { ok: true; feeLamports: string; balanceAfter: { lamports: string; tdvpnBase: string }; notes: string[] };
+  | { ok: true; feeLamports: string; rentLamports: string; balanceAfter: { lamports: string; tdvpnBase: string }; notes: string[] };
 
 const SOL = (l: bigint): string => {
   const w = l / 1_000_000_000n;
@@ -48,16 +51,22 @@ export function sendCheck(i: SendCheckInput): SendCheck {
   const bad = badRecipient(i.to, i.programId, i.mint);
   if (bad) return { ok: false, code: 'bad-recipient', message: bad };
   const fee = BASE_FEE_LAMPORTS;
+  // A22: a tDVPN send to a wallet with no tDVPN account creates it, and the sender pays its rent.
+  const rent = i.tdvpnBase > 0n && (i.recipientRentLamports ?? 0n) > 0n ? (i.recipientRentLamports as bigint) : 0n;
+  const cost = fee + rent;
+  const costWords = rent > 0n ? "the send, its fee and the recipient's token account rent need" : 'the send and its fee need';
   if (i.tdvpnBase > i.ownerTdvpnBase) return { ok: false, code: 'insufficient-funds', message: `This wallet holds ${TD(i.ownerTdvpnBase)} tDVPN; the send asks for ${TD(i.tdvpnBase)}. Nothing was sent or signed.` };
-  if (i.lamports + fee > i.ownerLamports) return { ok: false, code: 'insufficient-funds', message: `This wallet holds ${SOL(i.ownerLamports)} SOL; the send and its fee need ${SOL(i.lamports + fee)}. Nothing was sent or signed.` };
-  const after = i.ownerLamports - i.lamports - fee;
-  if (i.lamports > 0n && after < MIN_SOL_AFTER_LAMPORTS && !i.allowEmpty) {
+  if (i.lamports + cost > i.ownerLamports) return { ok: false, code: 'insufficient-funds', message: `This wallet holds ${SOL(i.ownerLamports)} SOL; ${costWords} ${SOL(i.lamports + cost)}. Nothing was sent or signed.` };
+  const after = i.ownerLamports - i.lamports - cost;
+  // A tDVPN-only send moves SOL only by the fee, unless it pays the recipient's account rent (A22).
+  if ((i.lamports > 0n || rent > 0n) && after < MIN_SOL_AFTER_LAMPORTS && !i.allowEmpty) {
     return { ok: false, code: 'low-sol-after', message: `This send leaves ${SOL(after)} SOL, less than the ${SOL(MIN_SOL_AFTER_LAMPORTS)} SOL the wallet needs for fees. Send less, or add --allow-empty to empty it. Nothing was sent or signed.` };
   }
   const notes: string[] = [];
+  if (rent > 0n) notes.push(`This creates the recipient's tDVPN token account (rent ${SOL(rent)} SOL, paid by you).`);
   if (i.to === i.owner) notes.push('This is your own address: only the fee moves.');
   if (i.device && i.to === i.device) notes.push("This is this computer's device: its SOL pays the fees of your VPN sessions.");
-  return { ok: true, feeLamports: fee.toString(), balanceAfter: { lamports: after.toString(), tdvpnBase: (i.ownerTdvpnBase - i.tdvpnBase).toString() }, notes };
+  return { ok: true, feeLamports: fee.toString(), rentLamports: rent.toString(), balanceAfter: { lamports: after.toString(), tdvpnBase: (i.ownerTdvpnBase - i.tdvpnBase).toString() }, notes };
 }
 
 // ─── device plan / setup --allowance (W-A3, #38 rc.8, T-A money audit ta2-c1) ───

@@ -1,2 +1,0 @@
-System proxy restored.
-off-exit=0

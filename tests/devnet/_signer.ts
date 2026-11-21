@@ -1,6 +1,6 @@
 // ─── Test signer from TEST_KEYFILE ───
 // Reads the #28 devnet wallet key file IN PLACE (never copied). The file has no
-// mnemonic — it is the only copy besides ~/memory/sentinel-solana-devnet-wallet/.
+// mnemonic — it has one offline backup, kept outside this repository.
 import { readFileSync } from 'node:fs';
 import { Keypair, type TransactionInstruction } from '@solana/web3.js';
 import { buildTx, sendSigned, type TxResult } from '../../src/core/chain/tx';

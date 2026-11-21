@@ -13,7 +13,7 @@ import { isWalletAddress } from '../core/wallet/keys';
 import { plural, formatPeriod, formatBytes } from '../shared/format';
 import type { Result, PendingSettlement } from '../shared/types';
 import { snapshot } from '../main/app-state';
-import { refreshWallet, deviceSetup, deviceSetupPlan, send, revokeDeviceAccess, revokeOtherDevice, switchWallet, SERVICE_NOT_STARTED } from '../main/services/wallet';
+import { refreshWallet, deviceSetup, deviceSetupPlan, send, recipientTokenRent, revokeDeviceAccess, revokeOtherDevice, switchWallet, SERVICE_NOT_STARTED } from '../main/services/wallet';
 import { refreshNodes, nodeViews, findNode, toggleFavourite } from '../main/services/nodes';
 import { connect, disconnect, adoptRunningSession, stopOtherConnect } from '../main/services/connection';
 import { clearSystemProxy } from '../main/system/proxy';
@@ -175,14 +175,17 @@ ${qr}Devnet SOL: https://faucet.solana.com/`, { address: addr });
     for (const k of ['tdvpn', 'sol']) if (str(a, k) !== undefined && amt(k) === 0) throw new UsageError(`--${k}: the amount must be more than 0.`);
     { const br = badRecipient(to, PROGRAM_ID.toBase58(), MINT.toBase58()); if (br) throw cliErr('bad-recipient', `${CLI_NAME} wallet send --to <wallet address> --yes`, br); }
     const wb = await walletRead();
+    const sendBase = BigInt(str(a, 'tdvpn') !== undefined ? toBaseUnits(str(a, 'tdvpn')!) : '0');
+    // A22: a tDVPN send to a wallet without a tDVPN account pays that account's rent; counted before the preview.
+    const recipientRentLamports = sendBase > 0n ? await recipientTokenRent(to) : 0n;
     const sc = sendCheck({
-      to, tdvpnBase: BigInt(str(a, 'tdvpn') !== undefined ? toBaseUnits(str(a, 'tdvpn')!) : '0'), lamports: str(a, 'sol') !== undefined ? toLamports(str(a, 'sol')!) : 0n,
+      recipientRentLamports, to, tdvpnBase: sendBase, lamports: str(a, 'sol') !== undefined ? toLamports(str(a, 'sol')!) : 0n,
       owner: wb.owner, ownerLamports: BigInt(String(wb.ownerLamports ?? 0)), ownerTdvpnBase: BigInt(String(wb.ownerTdvpn ?? 0)),
       device: deviceRecord()?.device ?? null, programId: PROGRAM_ID.toBase58(), mint: MINT.toBase58(), allowEmpty: flag(a, 'allow-empty'),
     });
     if (!sc.ok) throw cliErr(sc.code, sc.code === 'insufficient-funds' ? `${CLI_NAME} wallet show --json` : sc.code === 'low-sol-after' ? `${CLI_NAME} wallet send --to ${to} --sol <less> --yes` : `${CLI_NAME} wallet send --to <wallet address> --yes`, sc.message);
     const parts = [amt('tdvpn') ? `${str(a, 'tdvpn')} tDVPN` : '', amt('sol') ? `${str(a, 'sol')} SOL` : ''].filter(Boolean).join(' and ');
-    confirm(a, o, `Send ${parts} to ${to} on Solana devnet. Fee ${sol(sc.feeLamports)} SOL; after: ${sol(sc.balanceAfter.lamports)} SOL, ${tdvpn(sc.balanceAfter.tdvpnBase)} tDVPN.${sc.notes.length ? ` ${sc.notes.join(' ')}` : ''}`, { feeLamports: sc.feeLamports, balanceAfter: sc.balanceAfter, notes: sc.notes });
+    confirm(a, o, `Send ${parts} to ${to} on Solana devnet. Fee ${sol(sc.feeLamports)} SOL${sc.rentLamports !== '0' ? ` + ${sol(sc.rentLamports)} SOL token account rent` : ''}; after: ${sol(sc.balanceAfter.lamports)} SOL, ${tdvpn(sc.balanceAfter.tdvpnBase)} tDVPN.${sc.notes.length ? ` ${sc.notes.join(' ')}` : ''}`, { feeLamports: sc.feeLamports, balanceAfter: sc.balanceAfter, notes: sc.notes });
     const r = await send({ to, tdvpn: str(a, 'tdvpn'), sol: str(a, 'sol'), confirmed: true });
     need(r);
     o.print(`Sent. ${r.data}`, { signature: r.data, next: `${CLI_NAME} wallet show --json` });

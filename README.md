@@ -41,17 +41,15 @@ Live tests run in a disposable macOS guest on GCP, never on a laptop:
 | [`docs/MAC-PORT.md`](docs/MAC-PORT.md) | each Linux piece and what replaced it on macOS |
 | [`docs/INSTALLER.md`](docs/INSTALLER.md) | .dmg / .zip, first-run setup, update, uninstall, proof |
 | [`docs/CLI.md`](docs/CLI.md) | every command (generated from `src/cli/catalogue.ts`) |
-| [`docs/UPSTREAM-GAPS.md`](docs/UPSTREAM-GAPS.md) | daemon/protocol changes we need |
 | [`docs/LINUX-PORT.md`](docs/LINUX-PORT.md) | the Windows → Linux map this build started from |
-| [`docs/FEATURE-PLAN.md`](docs/FEATURE-PLAN.md), [`ARCHITECTURE`](docs/ARCHITECTURE.md), [`DESIGN`](docs/DESIGN.md), [`MANIFESTO`](docs/MANIFESTO.md) | shared with #31 (platform paths map per `MAC-PORT.md`) |
+| [`ARCHITECTURE`](docs/ARCHITECTURE.md), [`DESIGN`](docs/DESIGN.md), [`MANIFESTO`](docs/MANIFESTO.md) | shared with #31 (platform paths map per `MAC-PORT.md`) |
 
 ## Repo map (publish structure)
 
 - **Build / test:** `npm ci`, `npm run typecheck`, `npm test` (see sections above for platform specifics).
 - **Tests:** unit tests under `tests/` / `src/**/*.test.ts`; end-to-end harness under `scripts/e2e/`.
-- **Evidence:** `docs/evidence/` and `evidence/` (committed run proofs); raw per-cell results live outside git in `~/memory/cells/results/`.
-- **Cell manifests:** `cells/mac.tsv` (script prefix `DM:` resolves to this repo's `scripts/e2e/`; runner `~/memory/bin/cellrun.sh`).
-- **Never committed:** wallets, keys, `.env`, `dvpnd`/`upstream` source (see `.gitignore`). Intended to be published as a PRIVATE repo only.
+- **Evidence:** run proofs are the GitHub Actions run summaries and their evidence artifacts.
+- **Never committed:** wallets, keys, `.env`, `dvpnd`/`upstream` source (see `.gitignore`).
 
 ## License
 

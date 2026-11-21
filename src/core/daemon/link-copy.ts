@@ -37,7 +37,9 @@ export function daemonErrorCopy(raw: string): DaemonCopy | null {
     return { code: 'not-enough-tdvpn', message: tr('Your wallet doesn\'t have enough tDVPN for this deposit, so nothing was paid. Add tDVPN or pick a smaller deposit.'), action: null };
   }
   if (/a session is already active/i.test(t)) {
-    return { code: 'session-active', message: tr('A session is already active; disconnect it first.'), action: 'devnet-dvpn disconnect' };
+    // K13 (rc9-c2): the action is an agent's `next` too (cli/error-out.ts plainError): another run holds this
+    // session, so look, never end it (agent-cmd.ts SWEEP1_NEXT['session-active']). A person still has Disconnect.
+    return { code: 'session-active', message: tr('A session is already active; disconnect it first.'), action: 'devnet-dvpn agent status --json' };
   }
   // The service's own CLI already says it plainly before the socket path: keep that part only.
   const plain = /^(?:error:\s*)?(.+?)\s*\((?:unix:\/\/)?\/[^)]*\.sock\):\s*rpc error:/is.exec(t);

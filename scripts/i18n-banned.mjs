@@ -1,7 +1,7 @@
 // ─── i18n-banned — no banned name in the language work ───
 // The list lives outside the repository (one name per line, whole word; a line "cs:Name" is
 // case-sensitive; "#" starts a comment), so nothing here names anything. Path: env I18N_BANNED_LIST,
-// else ~/memory/devnet-dvpn-i18n/banned-names.txt.
+// else a list in the home directory (LIST_PATH below).
 // Fails on: the language work's own files (SCOPE) and the added lines of a diff (env I18N_DIFF = a
 // `git diff -U0 <FINAL>` file, for the B3/B4/B5 commits). Every other file's hits are only listed.
 //   node scripts/i18n-banned.mjs [--diff <file>]

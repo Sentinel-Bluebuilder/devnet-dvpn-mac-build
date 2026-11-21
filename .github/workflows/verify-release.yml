@@ -25,6 +25,12 @@ env:
   REL_REPO: Sentinel-Bluebuilder/sentinel-solana-dvpn-macos
   TAG: ${{ inputs.tag }}
 
+# #33 audit M2 (rc.9): GitHub runs a bare `run:` as `bash -e {0}`, so a failing command before a pipe (`… | tee`) did not
+# fail the step (a type error passed the build). `shell: bash` = `bash --noprofile --norc -eo pipefail {0}`.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   verify:
     runs-on: macos-15

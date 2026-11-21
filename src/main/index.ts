@@ -25,7 +25,9 @@ import { BLOCKED_AT_START_NOTICE, LOGIN_ITEM_TICK_MS, SERVICE_START_GRACE_MS, lo
 import { getDaemonSettings } from './daemon/settings';
 import { serviceInTransition } from './services/service-transition';
 import { cliKeyStore } from '../cli/keystore';
-import { runUiSmoke, prepareUiSmoke } from './dev/ui-smoke';
+import { devHooksArmed, uiSmokeEnv } from './dev/hooks';
+
+declare const __DVPN_DEV_HOOKS__: string;
 import { startLanguage } from './language';
 
 // Test-only overrides (same names as the CLI): a scratch data dir and a read-only
@@ -33,7 +35,11 @@ import { startLanguage } from './language';
 const TEST_DATA_DIR = process.env.DVPN_DATA_DIR || '';
 const TEST_KEYFILE = process.env.DVPN_KEYFILE || '';
 
-if (process.env.DVPN_UI_SMOKE) prepareUiSmoke();
+// K-M4-5: the UI test hooks load only in a build made with them (dev/hooks.ts). The literal test lets a release
+// bundle drop the import and its chunk; the switches are appended before 'ready' (the import resolves first).
+const uiSmoke = __DVPN_DEV_HOOKS__ && devHooksArmed(app.isPackaged) && process.env.DVPN_UI_SMOKE
+  ? import('./dev/ui-smoke').then((m) => { m.prepareUiSmoke(); return m; })
+  : null;
 app.setName(APP_DIR_NAME);
 app.setPath('userData', TEST_DATA_DIR || path.join(app.getPath('appData'), APP_DIR_NAME));
 
@@ -160,7 +166,10 @@ app.whenReady().then(async () => {
   await restoreProxyOnStartup().catch((err) => log.error('proxy restore on start failed', err));
   registerIpc();
   win = createWindow();
-  if (process.env.DVPN_UI_SMOKE) runUiSmoke(win, process.env.DVPN_UI_SMOKE);
+  if (uiSmoke) {
+    const smokeWin = win;
+    uiSmoke.then((m) => m.runUiSmoke(smokeWin, uiSmokeEnv(app.isPackaged))).catch((err) => log.error('ui smoke failed to start', err));
+  }
   createTray(() => win);
   if (!TEST_DATA_DIR) {
     // A per-user LaunchAgent (system/autostart.ts) starts …/Contents/MacOS/Devnet dVPN --hidden.

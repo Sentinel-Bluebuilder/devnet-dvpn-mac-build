@@ -15,6 +15,7 @@ import { getRpcState, isValidRpcUrl } from '../core/chain/rpc';
 import { publicIp, speedTest } from '../core/quality/quality';
 import { setSystemProxy, clearSystemProxy, systemProxyActive } from '../main/system/proxy';
 import { launchBrowser, BROWSERS, BROWSER_TITLES, type BrowserName } from '../main/system/browser';
+import { webUrl, WEB_URL_ONLY } from '../shared/web-url';
 import { applyStartWithOsFromCli } from '../main/system/autostart';
 import { loginItemWanted } from '../shared/kill-switch-start';
 import { getDaemonSettings, serviceUsesTun } from '../main/daemon/settings';
@@ -146,11 +147,15 @@ export const proxyCmd: Cmd = async (a, o) => {
   if (sub === 'browser') {
     const b = str(a, 'browser');
     if (b !== undefined && !BROWSERS.includes(b as BrowserName)) throw new UsageError(`--browser must be ${BROWSERS.join(' or ')}`);
+    // W31-16: refused before anything starts (a flag here reached the browser: the window went direct).
+    const rawUrl = str(a, 'url');
+    const page = rawUrl === undefined ? undefined : webUrl(rawUrl) ?? undefined;
+    if (rawUrl !== undefined && !page) throw new UsageError(WEB_URL_ONLY);
     await adoptRunningSession();
     const sep = snapshot().session?.proxyEndpoint;
     if (!sep) throw new Error('The current session has no SOCKS endpoint (only V2Ray/Xray sessions do). Nothing was opened.');
     // await: Linux's launchBrowser looks for the browser asynchronously (harmless where it is sync).
-    const r = await launchBrowser(sep, b as BrowserName | undefined, str(a, 'url') ?? undefined);
+    const r = await launchBrowser(sep, b as BrowserName | undefined, page);
     o.print(`Opened ${BROWSER_TITLES[r.browser]} through SOCKS ${r.endpoint} in its own profile. Your other browser windows do not use the VPN.`, r);
     return;
   }

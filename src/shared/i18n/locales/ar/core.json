@@ -505,7 +505,7 @@
   "ran {minGap} ms apart, cadence {everyMs} ms": "عمل بفاصل {minGap} ms، والمدة المحددة {everyMs} ms",
   "starts with \"{t}\"": "يبدأ بـ \"{t}\"",
   "{count} refunds started. Each reaches your wallet when ready.\u0005plural": {
-    "zero": "لم تبدأ أي عملية استرداد ({count}).",
+    "zero": "بدأت {count} عملية استرداد. تصل كل منها إلى محفظتك عندما تكون جاهزة.",
     "one": "بدأت {count} عملية استرداد. تصل إلى محفظتك عندما تكون جاهزة.",
     "two": "بدأت عمليتا استرداد ({count}). تصل كل منهما إلى محفظتك عندما تكون جاهزة.",
     "few": "بدأت {count} عمليات استرداد. تصل كل منها إلى محفظتك عندما تكون جاهزة.",

@@ -43,7 +43,7 @@ export const SERVICE_LABEL = serviceName('darwin', CLIENT_INSTANCE);
 export const SERVICE_PLIST = `/Library/LaunchDaemons/${SERVICE_LABEL}.plist`;
 const DEVICE_FILE = 'device.json';
 /** E-ST owner (#38 rc.9): set when the installed service's key was adopted; its config.toml may still name the
- *  owner it was set up for (root-only, unreadable here), so the next install step passes --Owner. */
+ *  owner it was set up for, so the next install step passes --Owner (the root step rewrites a kept home). */
 const OWNER_PENDING_FILE = 'service-owner-pending.json';
 const HEALTH_MS = 15_000;
 

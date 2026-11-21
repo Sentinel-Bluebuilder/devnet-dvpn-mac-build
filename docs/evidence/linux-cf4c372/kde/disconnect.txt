@@ -1,1 +1,0 @@
-Disconnected. Run "settle run --yes" to close the deposit and get the unused part back.

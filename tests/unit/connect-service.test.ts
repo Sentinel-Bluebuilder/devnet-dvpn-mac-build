@@ -58,7 +58,9 @@ vi.mock('../../src/main/services/net-settle', () => ({ waitForDirectPath: async 
 
 const { connect } = await import('../../src/main/services/connection');
 const { connectActionButton } = await import('../../src/shared/connect-action');
-const req = { node: 'NodeA', basis: 'per_gb' as const, units: 1, confirmed: true as const };
+// U-M4-1 (rc9-c2): every caller that opens a new deposit sends the amount it showed; a shown amount at or above
+// the fresh one never blocks (priceRaised), so the fixtures send one well above the mocked price.
+const req = { node: 'NodeA', basis: 'per_gb' as const, units: 1, confirmed: true as const, shownEscrow: '1000000000000000' };
 
 const { serviceView } = await import('../../src/core/daemon/service-state');
 beforeEach(() => { st.state = { session: null, conn: { phase: 'idle' }, lastConnectError: null }; st.reachable = []; st.starts = 0; st.watched = 0; st.service = undefined; st.up = false; st.recOwner = 'Owner'; st.ensured = 0; st.switchWorks = true; st.daemonImpl = null; });

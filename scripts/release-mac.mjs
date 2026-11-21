@@ -20,6 +20,8 @@ for (const a of arches) if (!['x64', 'arm64'].includes(a)) throw new Error(`unkn
 run('node', ['scripts/check-release-version.mjs', ...(args.includes('--allow-same-version') ? ['--allow-same-version'] : [])]); // L3
 if (!args.includes('--skip-tests')) { run('npm', ['run', 'typecheck']); run('npm', ['test']); }
 run('npx', ['electron-vite', 'build']);
+// K-M4-5 (rc9-c2): a release never carries the UI test hooks (a build made with DVPN_DEV_HOOKS set fails here).
+run('node', ['scripts/check-dev-hooks-payload.mjs']);
 run('node', ['scripts/build-cli.mjs']);
 fs.chmodSync('build/cli/devnet-dvpn', 0o755);
 

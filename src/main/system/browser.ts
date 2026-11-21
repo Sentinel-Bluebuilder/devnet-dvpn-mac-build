@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { storePath } from '../store';
 import { log } from '../logger';
+import { webUrl } from '../../shared/web-url';
 
 export type BrowserName = 'chrome' | 'chromium' | 'edge' | 'brave';
 export const BROWSERS: BrowserName[] = ['chrome', 'chromium', 'edge', 'brave'];
@@ -35,6 +36,10 @@ export function findBrowser(name: BrowserName, exists: (p: string) => boolean = 
 /** Command-line flags. Exported for tests: the DNS rule is what keeps lookups off this computer. */
 export function browserArgs(endpoint: string, profileDir: string, url: string): string[] {
   if (!/^127\.0\.0\.1:\d{2,5}$/.test(endpoint)) throw new Error(`"${endpoint}" is not a local SOCKS endpoint.`);
+  // W31-16 (rc9-c2): the page is a web address only, after Chromium's end-of-switches marker, so it can never be a flag
+  // (a bare `--proxy-server=direct://` here sent the "through the VPN" window direct).
+  const page = webUrl(url);
+  if (!page) throw new Error('the page to open is not an http(s) web address'); // copy:internal (the CLI refuses first)
   return [
     `--proxy-server=socks5://${endpoint}`,
     // Chrome resolves names itself unless every host is mapped away; with this rule the SOCKS5
@@ -47,7 +52,8 @@ export function browserArgs(endpoint: string, profileDir: string, url: string): 
     // CODE-AUDIT U-17 (#31 ac11293): WebRTC (STUN) is UDP too and would show any page the real public IP.
     '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
     '--new-window',
-    url,
+    '--',
+    page,
   ];
 }
 
