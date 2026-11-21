@@ -145,6 +145,29 @@ row_pf_restore() {
 # ─── rc9-e H (lead): the kill switch from a remote session (SSH_CONNECTION set) is refused without --allow-remote-lockout ───
 # 'persist' after a lost session locks a remote box out for good (proven on Linux). Positive control: the same env plus
 # the flag turns it on; then it goes back to what it was. Nothing is paid.
+# ─── rc9-f2 KS-SUDO (= #31 2f8a1a590): under sudo the SSH_* variables are gone; the parent chain still shows the sshd ───
+# macOS reads `ps -o comm` (the executable's basename), so a copy of /bin/bash named sshd stands in for the login's
+# sshd: sshd → sudo -n → devnet-dvpn daemon set --kill-switch on --yes must refuse (kill-switch-remote) and leave it off.
+# The positive control (the same refusal lifted by --allow-remote-lockout) is ks_remote_refused's.
+row_ks_remote_sudo() {
+  local w r code ks0 ks1 out
+  ks0=$("$CLI" daemon settings --json 2>/dev/null | jq -r '[.. | objects | .killSwitch? // empty] | .[0] // "off"' 2>/dev/null)
+  [ "${ks0:-off}" = off ] || { RC=1; record ks_remote_sudo DIFFERS "kill switch is '$ks0' before the row; not testing"; return; }
+  sudo -n true 2>/dev/null || { RC=1; record ks_remote_sudo DIFFERS "runner limit: no passwordless sudo"; return; }
+  w=$(mktemp -d "$HOME/kss.XXXXXX"); cp /bin/bash "$w/sshd"   # the -c below is a list ('; exit'): bash does not exec its last command, so the sshd copy stays the parent
+  out=$(env -u SSH_CONNECTION -u SSH_CLIENT -u SSH_TTY "$w/sshd" -c 'sudo -n "$0" daemon set --kill-switch on --yes --json; exit $?' "$CLI" 2>"$EV/ksr_sudo.err"); r=$?
+  { echo "\$ [sshd (a /bin/bash copy)] → sudo -n $CLI daemon set --kill-switch on --yes --json   (exit $r)"; echo "$out"; echo '--- stderr ---'; cat "$EV/ksr_sudo.err"; } >"$EV/ksr_sudo.out"; rm -f "$EV/ksr_sudo.err"
+  code=$(echo "$out" | jq -r '.code // empty' 2>/dev/null)
+  ks1=$("$CLI" daemon settings --json 2>/dev/null | jq -r '[.. | objects | .killSwitch? // empty] | .[0] // "off"' 2>/dev/null)
+  rm -rf "$w"
+  # never leave it on, whatever happened
+  [ "${ks1:-off}" = off ] || "$CLI" daemon set --kill-switch off --yes --json >>"$EV/ksr_sudo.out" 2>&1
+  RC=0
+  if [ "$r" != 0 ] && [ "$code" = kill-switch-remote ] && [ "${ks1:-off}" = off ]; then
+    record ks_remote_sudo PASS "sshd → sudo (no SSH_* left): kill switch on refused (exit $r, code $code), still off"
+  else RC=1; record ks_remote_sudo DIFFERS "exit=$r code='${code}' ks_after=${ks1:-?} (see ksr_sudo.out)"; fi
+}
+
 row_ks_remote_refused() {
   local ks0 r0 code on1 r2 on2
   ks0=$("$CLI" daemon settings --json 2>/dev/null | jq -r '[.. | objects | .killSwitch? // empty] | .[0] // "off"' 2>/dev/null)
@@ -157,7 +180,7 @@ row_ks_remote_refused() {
   if [ "${ks0:-off}" = on ]; then run ksr_back daemon set --kill-switch on --allow-remote-lockout --yes; else run ksr_back daemon set --kill-switch off --yes; fi
   { echo "ks0=$ks0 refused_rc=$r0 code=$code ks_after_refusal=$on1 allowed_rc=$r2 ks_after_allowed=$on2"; } >"$EV/ks_remote.out"
   RC=0
-  if [ "$r0" != 0 ] && [ "$on1" != on ] && [ "$r2" = 0 ] && [ "$on2" = on ]; then
+  if [ "$r0" != 0 ] && [ "$on1" = off ] && [ "$r2" = 0 ] && { [ "$on2" = on ] || [ "$on2" = persist ]; }; then   # config.ts:259 stores on as persist
     record ks_remote_refused PASS "SSH session: kill switch on refused (exit $r0, code ${code:-none}), still off; with --allow-remote-lockout it turns on (control); restored to $ks0"
   else RC=1; record ks_remote_refused DIFFERS "refused_rc=$r0 code='${code}' ks_after=$on1 allowed_rc=$r2 ks_after_allowed=$on2 (see ks_remote.out)"; fi
 }
@@ -209,9 +232,9 @@ row_wallet_switch() {
   # refused low-sol-after and stranded the SOL). sweep_leftovers re-checks the balance before the key is deleted.
   tdv=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" agent status --json 2>/dev/null | jq -r '.tdvpn // "0"')
   if [ -n "$tdv" ] && [ "$tdv" != 0 ]; then gap; runb sw_back_tdvpn wallet send --to "$a" --tdvpn "$tdv" --yes; fi
-  sol=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" agent status --json 2>/dev/null | jq -r '.sol // "0"')
-  keep=$(echo "$sol" | awk '{ v = $1 - 0.00001; if (v > 0) printf "%.9f", v; else print "" }')
-  if [ -n "$keep" ]; then gap; runb sw_back_sol wallet send --to "$a" --sol "$keep" --allow-empty --yes; fi
+  # R10-9: B's SOL goes back through gha-live.sh sweep_leftovers (one exact transfer to 0); a CLI send adds a priority
+  # fee, so "all but the fee" leaves dust under rent and is refused (run 44862462145).
+  keep='(by sweep_leftovers)'
   { echo "owner A=$a wallet B=$b"; echo "device before=$dev0 device as B=$devb"; echo "B followed: ${nb:-nothing}"; echo "A followed: ${na:-nothing}";
     echo "up_b=$upb down_b=$downb switch_back_a=$back up_a=$upa";
     echo "B left: tdvpn sent back=${tdv:-0} sol sent back=${keep:-0}"; } >"$EV/switch.out"
@@ -252,22 +275,24 @@ sha_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 # rows use that shape; the script's own stderr line is the fallback (it says the same thing).
 result_detail() { local d; d=$(sudo -n cat "$1" 2>/dev/null | jq -r '.error // .detail // .status // empty' 2>/dev/null); [ -n "$d" ] || d=$(grep -v '^refusing result path' "$2" 2>/dev/null | tail -1); printf '%s' "$d"; }
 row_c1_setup_links() {
-  local dvpnd w tgt t0 t1 res1 res2 rc1 rc2 d1 d2 home="$SVC_ROOT/c9"
-  dvpnd=$(find "$APP/Contents/Resources/resources" -name sentinel-dvpnd -type f 2>/dev/null | head -1)
-  [ -n "$dvpnd" ] || { RC=1; record c1_setup_links DIFFERS "no sentinel-dvpnd in $APP"; return; }
+  local bin dvpnd w tgt t0 t1 res1 res2 rc1 rc2 d1 d2 home="$SVC_ROOT/c9"
+  # rc9-f L32-1 pin (AC-MAC-1): --Dvpnd must be the bundle's own <Resources>/resources/bin/sentinel-dvpnd and --BinRoot that
+  # folder, checked BEFORE the staging/link guards; a find hit could be another copy and fail on the pin instead.
+  bin="$APP/Contents/Resources/resources/bin"; dvpnd="$bin/sentinel-dvpnd"
+  [ -x "$dvpnd" ] && [ ! -L "$dvpnd" ] || { RC=1; record c1_setup_links DIFFERS "no executable $dvpnd in the app"; return; }
   sudo -n test -e "$home" && { RC=1; record c1_setup_links DIFFERS "test home $home already exists; not touching it"; return; }
   w=$(mktemp -d "$HOME/c1.XXXXXX"); tgt="$w/target.txt"; echo "root must never write here" >"$tgt"; t0=$(sha_of "$tgt")
   # (a) a link INSIDE the staged home (device.pub -> the target)
   mkdir -p "$w/a/daemon-staging"; echo 'owner = "x"' >"$w/a/daemon-staging/config.toml"; ln -s "$tgt" "$w/a/daemon-staging/device.pub"
   mkdir -p "$w/devnet-dvpn-c1a"; res1="$w/devnet-dvpn-c1a/result.json"
   sudo -n /bin/bash "$SCRIPTS/setup-daemon.sh" --Dvpnd "$dvpnd" --Staging "$w/a/daemon-staging" --DaemonHome "$home" \
-    --BinRoot "$(dirname "$dvpnd")" --Group sentinel-dvpn --Service sentinel-dvpnd --Instance c9 --User "$(id -un)" --Result "$res1" >"$EV/c1_a.out" 2>&1; rc1=$?
+    --BinRoot "$bin" --Group sentinel-dvpn --Service sentinel-dvpnd --Instance c9 --User "$(id -un)" --Result "$res1" >"$EV/c1_a.out" 2>&1; rc1=$?
   d1=$(result_detail "$res1" "$EV/c1_a.out")
   # (b) the staging folder itself is a link (to a folder holding a config)
   mkdir -p "$w/real/daemon-staging"; echo 'owner = "x"' >"$w/real/daemon-staging/config.toml"; mkdir -p "$w/b"; ln -s "$w/real/daemon-staging" "$w/b/daemon-staging"
   mkdir -p "$w/devnet-dvpn-c1b"; res2="$w/devnet-dvpn-c1b/result.json"
   sudo -n /bin/bash "$SCRIPTS/setup-daemon.sh" --Dvpnd "$dvpnd" --Staging "$w/b/daemon-staging" --DaemonHome "$home" \
-    --BinRoot "$(dirname "$dvpnd")" --Group sentinel-dvpn --Service sentinel-dvpnd --Instance c9 --User "$(id -un)" --Result "$res2" >"$EV/c1_b.out" 2>&1; rc2=$?
+    --BinRoot "$bin" --Group sentinel-dvpn --Service sentinel-dvpnd --Instance c9 --User "$(id -un)" --Result "$res2" >"$EV/c1_b.out" 2>&1; rc2=$?
   d2=$(result_detail "$res2" "$EV/c1_b.out")
   t1=$(sha_of "$tgt")
   sudo -n rm -rf -- "$home"; rm -rf -- "$w"
@@ -285,7 +310,8 @@ row_c2_apply_link() {
   w=$(mktemp -d "$HOME/c2.XXXXXX"); tgt="$w/target.txt"; echo "root must never read this into a config" >"$tgt"; t0=$(sha_of "$tgt")
   mkdir -p "$w/staged"; ln -s "$tgt" "$w/staged/config.toml"
   mkdir -p "$w/devnet-dvpn-c2"; res="$w/devnet-dvpn-c2/result.json"
-  sudo -n /bin/bash "$SCRIPTS/apply-daemon-config.sh" --Staged "$w/staged" --DaemonHome "$home" --Result "$res" >"$EV/c2.out" 2>&1; rc=$?
+  # rc9-f: apply needs --User (the account that staged it); the staged folder must sit under that user's home ($HOME: yes)
+  sudo -n /bin/bash "$SCRIPTS/apply-daemon-config.sh" --Staged "$w/staged" --DaemonHome "$home" --User "$(id -un)" --Result "$res" >"$EV/c2.out" 2>&1; rc=$?
   d=$(result_detail "$res" "$EV/c2.out"); t1=$(sha_of "$tgt"); c1=$(sudo -n shasum -a 256 "$home/config.toml" | cut -d' ' -f1)
   sudo -n rm -rf -- "$home"; rm -rf -- "$w"
   { echo "rc=$rc detail=$d"; echo "target sha before=$t0 after=$t1"; echo "test config sha before=$c0 after=$c1"; } >>"$EV/c2_apply_link.out"
@@ -352,4 +378,4 @@ row_gui_smoke() {
   else record gui_smoke DIFFERS "open rc=$RC alive=$alive windows='$title' png=$png bytes (see gui_open.out)"; fi
 }
 
-ROWS="$ROWS doctor_rows c1_setup_links c2_apply_link launchd_print launchd_stopped clock_skew ks_remote_refused pf_restore wallet_switch gui_smoke install_by_hand"
+ROWS="$ROWS doctor_rows c1_setup_links c2_apply_link launchd_print launchd_stopped clock_skew ks_remote_refused ks_remote_sudo pf_restore wallet_switch gui_smoke install_by_hand"

@@ -22,6 +22,20 @@ const CU_CEIL = 1_400_000;
 const MAX_PRIORITY_FEE = 100_000; // µ-lamports / CU, dvpnctl's max_priority_fee
 const CONFIRM_TIMEOUT_MS = 60_000;
 const EXPIRY_RECHECK_MS = 2000;
+/** TX-LAND: after a lost send reply, poll this long at most (a blockhash lives ~60-90 s; the height check ends it). */
+const LOST_SEND_TIMEOUT_MS = 180_000;
+
+// ─── TX-LAND (rc9-f2 H): a write whose send reply was lost ───
+// The signed bytes may have reached the network even when every send attempt failed on the transport (an RPC took
+// them, its reply was lost). Calling that a failure made the app's second Send sign a NEW transaction: a double
+// transfer. So the signature is confirmed first, until the blockhash expires. Landed = ok; expired and unknown to
+// the chain = TxNotLandedError (nothing was sent); a chain that cannot be read = TxUnknownError (read the balances).
+export class TxNotLandedError extends ShownError {
+  code = 'tx-not-landed';
+}
+export class TxUnknownError extends ShownError {
+  code = 'tx-unknown';
+}
 
 export const ALLOWED_PROGRAMS = [
   PROGRAM_ID,
@@ -82,25 +96,35 @@ export async function sendSigned(tx: VersionedTransaction, { lastValidBlockHeigh
   const raw = tx.serialize();
   const expected = b58encode(tx.signatures[0]);
   let signature: string;
+  let lost = false; // TX-LAND: every send attempt failed on the transport; the bytes may still have landed
   try {
     // Identical signed bytes resend idempotently (same signature), so transport failures retry safely.
     signature = await rpcCall((c) => c.sendRawTransaction(raw, { skipPreflight: false, preflightCommitment: COMMITMENT, maxRetries: 3 }), { label: `${label}:send`, timeoutMs: 30_000 });
   } catch (err) {
     // A lost send response followed by a retry lands here: the tx IS on chain, so confirm it.
     if (/already been processed|AlreadyProcessed/i.test(String((err as Error)?.message ?? ''))) signature = expected;
-    else if (isTransportError(err)) throw err;
-    else throw new ProgramError(err, { logs: (err as { logs?: string[] }).logs ?? null });
+    else if (isTransportError(err)) {
+      console.warn(`[tx] ${label}: send reply lost (${String((err as Error)?.message ?? err).split('\n')[0].slice(0, 160)}); confirming ${expected} before anything is reported`);
+      signature = expected;
+      lost = true;
+    } else throw new ProgramError(err, { logs: (err as { logs?: string[] }).logs ?? null });
   }
   let lvbh = lastValidBlockHeight;
   if (!lvbh) {
-    const bh = await rpcCall((c) => c.getLatestBlockhash(COMMITMENT), { label: `${label}:blockhash` });
-    lvbh = bh.lastValidBlockHeight;
+    try {
+      const bh = await rpcCall((c) => c.getLatestBlockhash(COMMITMENT), { label: `${label}:blockhash` });
+      lvbh = bh.lastValidBlockHeight;
+    } catch (err) {
+      if (!lost) throw err;
+      throw new TxUnknownError('{label}: sent but not confirmed (signature {signature}); it may still land. Check your balances before you try again, or it may be sent twice.', { label, signature }, { cause: err });
+    }
   }
-  return confirmSignature(signature, lvbh, label);
+  return confirmSignature(signature, lvbh, label, { lostSend: lost });
 }
 
 /** Confirmation polled through the RPC pool, so one 429 never turns a landed tx into a failure. */
-export async function confirmSignature(signature: string, lastValidBlockHeight: number, label: string): Promise<TxResult> {
+export async function confirmSignature(signature: string, lastValidBlockHeight: number, label: string, { lostSend = false }: { lostSend?: boolean } = {}): Promise<TxResult> {
+  const timeoutMs = lostSend ? LOST_SEND_TIMEOUT_MS : CONFIRM_TIMEOUT_MS;
   // RPC budget: one status read every 2 s; the expiry check (block height) only every 4th
   // round (~8 s; a blockhash lives ~60-90 s). Was 2 reads per 1.5 s. (Same fix as #32 f0fe423.)
   // The tx is already sent: a rate-limited or failed READ says nothing about it, so keep polling
@@ -109,7 +133,7 @@ export async function confirmSignature(signature: string, lastValidBlockHeight: 
   const started = Date.now();
   let pause = 2000;
   let lastReadError = '';
-  for (let round = 1; Date.now() - started < CONFIRM_TIMEOUT_MS; round++) {
+  for (let round = 1; Date.now() - started < timeoutMs; round++) {
     try {
       const st = await rpcCall((c) => c.getSignatureStatuses([signature]), { label: `${label}:status`, attempts: 2, timeoutMs: 8000 });
       const v = st.value[0];
@@ -125,7 +149,7 @@ export async function confirmSignature(signature: string, lastValidBlockHeight: 
           // history search, after a pause: expired only if the chain still knows nothing of it.
           await new Promise((r) => setTimeout(r, EXPIRY_RECHECK_MS));
           const again = (await rpcCall((c) => c.getSignatureStatuses([signature], { searchTransactionHistory: true }), { label: `${label}:status`, attempts: 2, timeoutMs: 8000 })).value[0];
-          if (!again) throw new Error(`${label}: transaction ${signature} expired before confirmation.`);
+          if (!again) throw new TxNotLandedError('{label}: transaction {signature} expired before confirmation. The network never took it, so nothing was sent or paid; you can try again.', { label, signature });
           if (again.err) throw new ProgramError({ err: again.err, message: tr('Transaction {signature} failed.', { signature }) });
           if (again.confirmationStatus === 'confirmed' || again.confirmationStatus === 'finalized') return { ok: true, signature, slot: again.slot };
           // processed: it is in a block, so keep polling to the deadline ("sent, may still land"), never "expired".
@@ -139,7 +163,8 @@ export async function confirmSignature(signature: string, lastValidBlockHeight: 
     }
     await new Promise((r) => setTimeout(r, pause));
   }
-  throw new Error(`${label}: sent but not confirmed within ${CONFIRM_TIMEOUT_MS / 1000}s (signature ${signature}); it may still land, so check again before retrying${lastReadError ? `. Last read error: ${lastReadError}` : ''}`);
+  throw new TxUnknownError('{label}: sent but not confirmed within {secs} s (signature {signature}); it may still land. Check your balances before you try again, or it may be sent twice.{last}',
+    { label, secs: timeoutMs / 1000, signature, last: lastReadError ? ` Last read error: ${lastReadError}` : '' });
 }
 
 export function encodeTx(tx: VersionedTransaction): string {

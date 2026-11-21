@@ -7,7 +7,7 @@
 #   3. anything a dead session left (remove-tunnels.sh)
 # Kept: the instance home (device key: on-chain permission + SOL; a reinstall picks it up again) and
 # the sentinel-dvpn group (removing it would orphan the kept home's group owner).
-# Args: [--Result]
+# Args: [--User] [--Result]   (--User = the app user whose proxy backup is put back; none = no proxy restore)
 set -uo pipefail
 HERE="$(cd -P "$(dirname "$0")" && pwd -P)"
 source "$HERE/_lib.sh"
@@ -16,11 +16,31 @@ log() { echo "uninstall-cleanup: $*"; }
 
 # 1. system proxy. Backup shape (src/main/system/proxy.ts):
 #    {"ours":"socks 127.0.0.1:1080","state":{"backend":"networksetup","services":{"Wi-Fi":{"enabled":"No","server":"","port":"0"}}}}
-for b in /Users/*/Library/Application\ Support/Devnet\ dVPN/proxy-backup.json; do
+# M33-3 (rc9-f-mac): this read EVERY /Users/*/.../proxy-backup.json, and the "still ours" value came from that same
+# file, so another account could plant a backup that set the system-wide SOCKS proxy to its own server. Now: only
+# the --User app user's backup, under that user's real home with no link in the chain, owned by that user; `ours`
+# must be the app's own 127.0.0.1:<port> and the value put back a plain host + port (_lib.sh proxy_ours_ok,
+# proxy_restore_ok).
+USER_NAME="${ARG_User:-}"
+BACKUPS=()
+if [ -z "$USER_NAME" ]; then
+  log "no --User: system proxy not restored (only the app user's own backup is ever used)"
+elif ! user_is_asker "$USER_NAME"; then
+  log "--User $USER_NAME is not the account that asked for this step: system proxy not restored"
+elif [[ "$USER_NAME" =~ ^[A-Za-z_][A-Za-z0-9_.-]{0,31}$ ]] && uh="$(real_home "$USER_NAME")" && [ -n "$uh" ]; then
+  bdir="$uh/Library/Application Support/Devnet dVPN"
+  if [ -d "$bdir" ] && [ "$(cd -P -- "$bdir" 2>/dev/null && pwd -P)" = "$bdir" ]; then BACKUPS=("$bdir/proxy-backup.json"); fi
+else
+  log "no home for $USER_NAME: system proxy not restored"
+fi
+for b in ${BACKUPS[@]+"${BACKUPS[@]}"}; do
   [ -f "$b" ] && [ ! -L "$b" ] || continue
+  [ "$(stat -f %Su "$b")" = "$USER_NAME" ] || { log "proxy backup $b is not owned by $USER_NAME: not used"; continue; }
   rows="$(/usr/bin/osascript -l JavaScript -e 'function run(a){var o=JSON.parse($.NSString.stringWithContentsOfFileEncodingError(a[0],4,null).js);var ours=String(o.ours||"").replace("socks ","");var s=(o.state&&o.state.services)||{};return Object.keys(s).map(function(k){var v=s[k];return [k,ours,v.enabled||"No",v.server||"",v.port||"0"].join("\t")}).join("\n")}' "$b" 2>/dev/null)" || { log "unreadable proxy backup $b"; continue; }
   while IFS=$'\t' read -r svc ours en server port; do
     [ -n "$svc" ] || continue
+    proxy_ours_ok "$ours" || { log "proxy backup names '$ours', not the app's 127.0.0.1 endpoint: $svc left as it is"; continue; }
+    proxy_restore_ok "$server" "$port" || { log "proxy backup value for $svc is not a host and port: left as it is"; continue; }
     cur="$(networksetup -getsocksfirewallproxy "$svc" 2>/dev/null)"
     cur_en="$(printf '%s\n' "$cur" | awk -F': ' '/^Enabled/{print $2}')"
     cur_host="$(printf '%s\n' "$cur" | awk -F': ' '/^Server/{print $2}')"

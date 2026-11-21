@@ -27,7 +27,7 @@ describe('M8: staging is checked on its canonical path, under the --User home', 
   it('all of it runs before the staged home is copied or removed', () => {
     const check = s.indexOf('[ "$staging_real" = "$STAGING" ]');
     expect(check).toBeGreaterThan(-1);
-    expect(check).toBeLessThan(s.indexOf('cp -Rp "$STAGING/."'));
+    expect(check).toBeLessThan(s.indexOf('copy_as_user "$USER_NAME" "$STAGING"')); // M33-1: read as the user (rc9f-mac.test.ts)
     expect(check).toBeLessThan(s.indexOf('rm -rf -- "$STAGING"'));
   });
 });

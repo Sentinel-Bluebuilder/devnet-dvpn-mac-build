@@ -320,6 +320,10 @@ export async function send(req: { to: string; tdvpn?: string; sol?: string; conf
     await refreshWallet();
     return { ok: true, data: r.signature };
   } catch (err) {
-    return { ok: false, error: errText(err), code: 'send-failed' };
+    // TX-LAND (rc9-f2 H): not sent (tx-not-landed) or not known (tx-unknown) keep their code; the balances are read
+    // again so the screen shows what really moved before anyone sends again.
+    const code = (err as { code?: string }).code;
+    if (code === 'tx-unknown') await refreshWallet().catch((e: Error) => log.warn('send: balance re-read after an unknown result failed', { err: e.message }));
+    return { ok: false, error: errText(err), code: code === 'tx-unknown' || code === 'tx-not-landed' ? code : 'send-failed' };
   }
 }

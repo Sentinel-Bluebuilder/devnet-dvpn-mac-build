@@ -383,7 +383,7 @@ describe('uninstall restores the system proxy', () => {
     const s = fs.readFileSync('resources/scripts/uninstall-cleanup.sh', 'utf8');
     expect(s).toContain('state.services');
     expect(s).toContain('[ "$cur_en" = Yes ] && [ "$cur_host:$cur_port" = "$ours" ]');
-    expect(s).toContain('Library/Application\\ Support/Devnet\\ dVPN/proxy-backup.json');
+    expect(s).toContain('bdir="$uh/Library/Application Support/Devnet dVPN"'); // M33-3: only the --User app user's own backup
   });
 });
 
@@ -451,7 +451,7 @@ describe('setup after a wallet switch (fleet bug W1)', () => {
     expect(s).toMatch(/svc_stop \|\| die/);
     expect(s).toContain('mv "$HOME_DIR" "$prev"');
     expect(s).toContain('.prev-$(date -u');
-    expect(s.indexOf('mv "$HOME_DIR" "$prev"')).toBeLessThan(s.indexOf('cp -Rp "$STAGING/."'));
+    expect(s.indexOf('mv "$HOME_DIR" "$prev"')).toBeLessThan(s.indexOf('copy_as_user "$USER_NAME" "$STAGING"')); // M33-1
     expect(s).not.toMatch(/rm -rf "\$HOME_DIR"|rm -rf "\$prev"/);
   });
 });

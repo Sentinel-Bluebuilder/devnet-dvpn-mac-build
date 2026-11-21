@@ -83,6 +83,56 @@ atomic_write() {
   mv -f "$tmp" "$dst" || { rm -f "$tmp"; return 1; }
   sync
 }
+# ─── M33-1 (rc9-f-mac): the user's staged files are READ WITH THAT USER'S RIGHTS, never root's ───
+# macOS has no protected_hardlinks: a staged file hard-linked to a root-only file read fine as root (`cp -Rp`) and
+# its bytes landed in a home file the setup user can read. Now the user's own tar reads the staging folder (a link
+# to a file the user may not read fails there) and root only unpacks that stream into its root-only folder.
+# as_user <user> <cmd...>: the command as that account (directly when this already is that account: tests, rig).
+as_user() { local u="$1"; shift; if [ "$(id -un)" = "$u" ]; then "$@"; else /usr/bin/sudo -n -u "$u" -- "$@"; fi; }
+TAR_META=(); [ "$(uname)" = Darwin ] && TAR_META=(--no-mac-metadata)
+# copy_as_user <user> <user's folder> <root-only folder>: 0 = copied; 1 = the user could not read every file.
+copy_as_user() {
+  local u="$1" s="$2" d="$3" rc
+  as_user "$u" tar ${TAR_META[@]+"${TAR_META[@]}"} -C "$s" -cf - . | tar -C "$d" --no-same-owner -xf -
+  rc=("${PIPESTATUS[@]}")
+  # unpacked as root-owned files (--no-same-owner) in a folder that stays root-only, so the user cannot change the
+  # copy between the link checks and its use
+  chmod 700 "$d" || return 1
+  [ "${rc[0]}" = 0 ] && [ "${rc[1]}" = 0 ]
+}
+# has_hardlink <folder>: true when a file in it has more than one name (refused: one staged name could alias another)
+has_hardlink() { [ -n "$(find "$1" -type f -links +1 -print 2>/dev/null | head -1)" ]; }
+# real_home <user>: that account's home folder, every link resolved; empty when there is none
+real_home() {
+  local h; h="$(dscl . -read "/Users/$1" NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+  [ -n "$h" ] && (cd -P -- "$h" 2>/dev/null && pwd -P)
+}
+# ─── rc9-f-mac (AC-LINUX rc9-f-linux twin): --User must be the account that ASKED for this root step ───
+# Otherwise a caller names `--User root` (or another account) and the staged files are read with those rights.
+# asker_uid: SUDO_UID under sudo; else the first non-root process up the parent chain (the osascript admin prompt
+# runs us under security_authtrampoline, whose parent is the user's osascript); empty = a root shell asked.
+asker_uid() {
+  if [ -n "${SUDO_UID:-}" ] && [ "$SUDO_UID" != 0 ]; then echo "$SUDO_UID"; return 0; fi
+  local p="$PPID" u i
+  for i in 1 2 3 4 5 6 7 8; do
+    [ "${p:-0}" -gt 1 ] 2>/dev/null || return 0
+    u="$(ps -o uid= -p "$p" 2>/dev/null | tr -d ' ')"; [ -n "$u" ] || return 0
+    [ "$u" != 0 ] && { echo "$u"; return 0; }
+    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+  done
+}
+# user_is_asker <user>: never root; when the asker is known, the user must be that account
+user_is_asker() {
+  local u="$1" a
+  [ -n "$u" ] && [ "$u" != root ] || return 1
+  a="$(asker_uid)"
+  [ -z "$a" ] || [ "$(id -u "$u" 2>/dev/null)" = "$a" ]
+}
+# ─── M33-3 (rc9-f-mac): a proxy-backup row is restored only in the app's own shapes ───
+# proxy_ours_ok <ours>: the app's SOCKS endpoint is always 127.0.0.1:<port>
+proxy_ours_ok() { [[ "$1" =~ ^127\.0\.0\.1:[0-9]{1,5}$ ]]; }
+# proxy_restore_ok <server> <port>: the value put back is a host name / address and a port (or none)
+proxy_restore_ok() { [[ "$1" =~ ^[A-Za-z0-9.:-]{0,253}$ ]] && [[ "$2" =~ ^[0-9]{1,5}$ ]]; }
 # canonical path without requiring it to exist (macOS has no `realpath -m`; /var → /private/var)
 canon() {
   local p="$1" tail=""

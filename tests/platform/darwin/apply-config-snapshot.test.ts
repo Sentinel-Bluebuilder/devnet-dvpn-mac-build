@@ -13,14 +13,14 @@ const at = (re: RegExp): number => lines.findIndex((l) => re.test(l) && !/^\s*#/
 
 describe('apply-daemon-config.sh staged snapshot', () => {
   it('snapshots every staged file with cp -RP into a root-owned folder before the service stops', () => {
-    const snap = at(/cp -RP -- "\$\{SRC\[\$i\]\}" "\$snap\//);
+    const snap = at(/as_user "\$USER_NAME" head -c 65537 -- "\$\{SRC\[\$i\]\}" > "\$snap\//); // M33-1: read as the user
     expect(snap).toBeGreaterThan(-1);
     expect(at(/mktemp -d "\$HOME_DIR\/\.staged\./)).toBeLessThan(snap);
     expect(snap).toBeLessThan(at(/\[ \$has_svc = 1 \] && svc_stop/));
   });
 
   it('refuses a snapshot that is a link and writes only from the snapshot', () => {
-    expect(at(/\[ -L "\$snap\/\$i" \]/)).toBeGreaterThan(-1);
+    expect(at(/\[ -L "\$\{SRC\[\$i\]\}" \]/)).toBeGreaterThan(-1);
     expect(at(/atomic_write "\$snap\/\$i" "\$\{DST\[\$i\]\}"/)).toBeGreaterThan(-1);
     expect(at(/atomic_write "\$\{SRC\[\$i\]\}"/)).toBe(-1);
   });

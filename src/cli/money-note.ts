@@ -33,6 +33,8 @@ const NONE: readonly string[] = [
   'no-nodes', 'not-funded', 'no-subscription', 'service-down', 'service-not-ready',
   // L-RPC (#38 rc.8): the service's own preflight to its RPC failed ("waiting for network: preflight failed: rpc").
   'waiting-for-network',
+  // TX-LAND (rc9-f2): the transaction expired and the chain never took it
+  'tx-not-landed',
 ];
 
 const OPEN: readonly string[] = [
@@ -49,7 +51,7 @@ const OPEN: readonly string[] = [
   'stop-failed', 'dns-revert-failed', 'tunnel-left', 'node-refused', 'server-stopped',
 ];
 
-const UNCLEAR: readonly string[] = ['unknown', 'connect-failed', 'rpc-busy', 'rpc-unavailable', 'rpc-ws'];
+const UNCLEAR: readonly string[] = ['unknown', 'connect-failed', 'rpc-busy', 'rpc-unavailable', 'rpc-ws', 'tx-unknown']; // tx-unknown: TX-LAND rc9-f2
 
 const REFUND: readonly string[] = ['settle-failed', 'daemon-gone']; // daemon-gone: the service stopped mid-refund (AC-CODES #3, rc.6)
 

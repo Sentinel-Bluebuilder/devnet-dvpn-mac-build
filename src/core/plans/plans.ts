@@ -5,7 +5,7 @@
 // owner and TLS pin are checked before the roster is trusted.
 import { allPlans, allProviders, providerByPda, signerAuthorized, subscriptionsByOwner } from '../chain/accounts';
 import { PERM_SIGN_PROVIDER_METADATA, PROGRAM_ID, STATUS_LISTED } from '../chain/idl';
-import { httpsRequest, parseUri, verifySignedMetadata, DOMAIN_PROVIDER_METADATA } from '../nodes/nodeapi';
+import { httpsRequest, parseUri, signedPayload, verifySignedMetadata, DOMAIN_PROVIDER_METADATA } from '../nodes/nodeapi';
 import { ShownError, tr, type Vars } from '../../shared/i18n';
 
 export interface PlanRecord {
@@ -115,7 +115,8 @@ export async function providerApi(providerPda: string, { timeoutMs = 8000 } = {}
   if (!origin) throw new ProviderError('Provider advertises no usable address ("{address}")', { address: p.uri }, 'provider-no-uri');
   const res = await httpsRequest(`${origin}/v1/metadata`, { timeoutMs, captureCert: true });
   if (res.status !== 200 || !res.json?.payload) throw new ProviderError('Provider did not answer (HTTP {status})', { status: res.status }, 'provider-unreachable');
-  const m = res.json.payload as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  // C31-1: the claims come from the signed text, never from JSON.parse's (last) payload member.
+  const m = (signedPayload(res.text) ?? {}) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const problems: string[] = [];
   if (!verifySignedMetadata(res.text, res.json, DOMAIN_PROVIDER_METADATA)) problems.push('signature does not verify');
   if (m.owner !== p.owner) problems.push('owner does not match the chain');

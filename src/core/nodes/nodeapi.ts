@@ -37,35 +37,103 @@ export function verifyDomain(pubkey: string, dom: Buffer, msg: Buffer, sig: Buff
   return edVerify(null, Buffer.concat([dom, msg]), key, sig);
 }
 
-/** Extract the raw `payload` JSON text (byte-exact) from a SignedMessage body. */
-export function rawPayload(text: string): string | null {
-  const keyStr = '"payload"';
-  const k = text.indexOf(keyStr);
-  if (k < 0) return null;
-  let i = text.indexOf(':', k + keyStr.length);
-  if (i < 0) return null;
-  i += 1;
-  while (i < text.length && /\s/.test(text[i])) i += 1;
-  if (text[i] !== '{') return null;
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  for (let j = i; j < text.length; j++) {
-    const c = text[j];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (c === '\\') esc = true;
-      else if (c === '"') inStr = false;
-      continue;
-    }
-    if (c === '"') inStr = true;
-    else if (c === '{') depth += 1;
-    else if (c === '}') {
-      depth -= 1;
-      if (depth === 0) return text.slice(i, j + 1);
-    }
+// ─── C31-1 (rc9-f2, M): the payload that is verified is the payload that is read ───
+// Before, the signature was checked over the first `"payload"` text anywhere in the body, while discovery and plans
+// read JSON.parse's member (the LAST duplicate). A body with two payload keys (the first signed, the second forged)
+// passed signatureValid with forged claims, api.tls_sha256 included. Now only the body's own top-level members are
+// read (keys decoded, so "payload" counts), a second top-level payload refuses the body, and callers read
+// signedPayload(text): the exact text the signature covers.
+
+/** Index just past the JSON string that starts at text[i] (a '"'), or -1. */
+function stringEnd(text: string, i: number): number {
+  for (let j = i + 1; j < text.length; j++) {
+    if (text[j] === '\\') j += 1;
+    else if (text[j] === '"') return j + 1;
   }
-  return null;
+  return -1;
+}
+
+/** Index just past the JSON value that starts at text[i], or -1. */
+function valueEnd(text: string, i: number): number {
+  const c = text[i];
+  if (c === '"') return stringEnd(text, i);
+  if (c === '{' || c === '[') {
+    let depth = 0;
+    for (let j = i; j < text.length; j++) {
+      const d = text[j];
+      if (d === '"') {
+        const e = stringEnd(text, j);
+        if (e < 0) return -1;
+        j = e - 1;
+      } else if (d === '{' || d === '[') depth += 1;
+      else if (d === '}' || d === ']') {
+        depth -= 1;
+        if (depth === 0) return j + 1;
+      }
+    }
+    return -1;
+  }
+  let j = i;
+  while (j < text.length && !/[\s,}\]]/.test(text[j])) j += 1;
+  return j > i ? j : -1;
+}
+
+/** The raw text (byte-exact) of the body's single top-level `payload` object; null when absent, not an object,
+ *  given twice, or the body is not one JSON object. */
+export function rawPayload(text: string): string | null {
+  let i = 0;
+  const ws = (): void => { while (i < text.length && /\s/.test(text[i])) i += 1; };
+  ws();
+  if (text[i] !== '{') return null;
+  i += 1;
+  ws();
+  if (text[i] === '}') return null;
+  let found: string | null = null;
+  for (;;) {
+    ws();
+    if (text[i] !== '"') return null;
+    const ke = stringEnd(text, i);
+    if (ke < 0) return null;
+    let key: unknown;
+    try {
+      key = JSON.parse(text.slice(i, ke));
+    } catch (err) {
+      console.warn(`[nodeapi] signed body has an unreadable key: ${(err as Error).message}`);
+      return null;
+    }
+    i = ke;
+    ws();
+    if (text[i] !== ':') return null;
+    i += 1;
+    ws();
+    const ve = valueEnd(text, i);
+    if (ve < 0) return null;
+    if (key === 'payload') {
+      if (found !== null) {
+        console.warn('[nodeapi] signed body has more than one "payload" key: refused');
+        return null;
+      }
+      if (text[i] !== '{') return null;
+      found = text.slice(i, ve);
+    }
+    i = ve;
+    ws();
+    if (text[i] === ',') { i += 1; continue; }
+    if (text[i] === '}') return found;
+    return null;
+  }
+}
+
+/** The payload exactly as signed (parsed from rawPayload), or null. Read the claims from this, never from json. */
+export function signedPayload(text: string): Record<string, unknown> | null {
+  const raw = rawPayload(text);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch (err) {
+    console.warn(`[nodeapi] signed payload is not JSON: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 export interface SignedBody { payload?: Record<string, unknown>; signature?: string; signer?: string }

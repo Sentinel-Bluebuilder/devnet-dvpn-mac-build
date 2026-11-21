@@ -976,7 +976,9 @@ export async function uninstallService(): Promise<{ ok: boolean; error?: string;
       if (!(err instanceof DaemonError && err.kind === 'not-found')) log.warn('releasing the kill switch before uninstall', { err: (err as Error).message });
     }
   }
-  const r = await runElevated(scriptPath('uninstall-cleanup.sh'), {}, 300_000);
+  // M33-3 (rc9-f-mac): only this app user's proxy backup is restored (--User), never another account's.
+  const user = loginName();
+  const r = await runElevated(scriptPath('uninstall-cleanup.sh'), { ...(user ? { User: user } : {}) }, 300_000);
   relinkDaemon();
   return r.status === 'ok' ? { ok: true, detail: r.detail } : { ok: false, error: r.detail };
 }

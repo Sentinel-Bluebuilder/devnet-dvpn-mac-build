@@ -95,6 +95,9 @@ export function readKeyfile(file: string, read: (f: string) => string = (f) => f
   }
 }
 
+/** M33-11 (rc9-f-mac): the macOS shell line (it named PowerShell's Remove-Item, a Windows command). Exported for tests. */
+export const KEYFILE_RO_NEXT = 'drop --keyfile and run unset DVPN_KEYFILE, then run the command again';
+
 export function cliKeyStore(dataDir: string, keyfile?: string): KeyStore {
   if (keyfile) {
     return {
@@ -102,8 +105,8 @@ export function cliKeyStore(dataDir: string, keyfile?: string): KeyStore {
       path: keyfile, // E-18: noWallet() names the missing file (#31 main)
       exists: () => fs.existsSync(keyfile),
       load: (): Keypair | null => (fs.existsSync(keyfile) ? keypairFromInput(readKeyfile(keyfile)) : null),
-      save() { throw cliErr('keyfile-read-only', `drop --keyfile and unset DVPN_KEYFILE (PowerShell: Remove-Item Env:DVPN_KEYFILE), then run the command again`, 'A --keyfile / DVPN_KEYFILE wallet is read-only. Run without it to import or create a wallet.'); }, // AUD-2 M11
-      remove() { throw cliErr('keyfile-read-only', `drop --keyfile and unset DVPN_KEYFILE (PowerShell: Remove-Item Env:DVPN_KEYFILE), then run the command again`, 'A --keyfile / DVPN_KEYFILE wallet is never deleted by this CLI.'); },
+      save() { throw cliErr('keyfile-read-only', KEYFILE_RO_NEXT, 'A --keyfile / DVPN_KEYFILE wallet is read-only. Run without it to import or create a wallet.'); }, // AUD-2 M11
+      remove() { throw cliErr('keyfile-read-only', KEYFILE_RO_NEXT, 'A --keyfile / DVPN_KEYFILE wallet is never deleted by this CLI.'); },
     };
   }
   const marker = path.join(dataDir, 'wallet.cli.keyring');

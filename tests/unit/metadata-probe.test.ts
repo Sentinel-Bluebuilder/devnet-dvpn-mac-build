@@ -24,7 +24,7 @@ vi.mock('../../src/core/chain/accounts', () => ({
 vi.mock('../../src/core/nodes/nodeapi', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   verifySignedMetadata: () => true,
-  httpsRequest: async () => ({ status: 200, latencyMs: 5, text: '{}', certSha256: 'ab', json: { payload: st.payload, signer: st.signer } }),
+  httpsRequest: async () => ({ status: 200, latencyMs: 5, text: JSON.stringify({ payload: st.payload, signer: st.signer }), certSha256: 'ab', json: { payload: st.payload, signer: st.signer } }) // C31-1: the text is the body; claims are read from it,
 }));
 const { probeNode } = await import('../../src/core/nodes/discovery');
 const { providerApi } = await import('../../src/core/plans/plans');

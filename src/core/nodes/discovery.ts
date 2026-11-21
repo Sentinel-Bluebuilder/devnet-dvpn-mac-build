@@ -8,7 +8,7 @@ import net from 'node:net';
 import { allNodes, nodeByPda, signerAuthorized } from '../chain/accounts';
 import { fetchConfig } from '../chain/program';
 import { PERM_SIGN_NODE_METADATA, PROGRAM_ID, STATUS_LISTED } from '../chain/idl';
-import { httpsRequest, parseUri, verifySignedMetadata } from './nodeapi';
+import { httpsRequest, parseUri, signedPayload, verifySignedMetadata } from './nodeapi';
 import { countryName, continentOf, countryNameToCode } from './country';
 
 export interface NodeRecord {
@@ -136,7 +136,8 @@ export async function probeNode(node: Pick<NodeRecord, 'address' | 'owner' | 'ur
   out.latencyMs = res.latencyMs;
   if (res.status !== 200 || !res.json) { out.error = `Server answered HTTP ${res.status}`; return out; }
   out.reachable = true;
-  const m = (res.json.payload ?? {}) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  // C31-1: the claims come from the signed text, never from JSON.parse's (last) payload member.
+  const m = (signedPayload(res.text) ?? {}) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   out.signatureValid = verifySignedMetadata(res.text, res.json);
   out.signerIsOwner = res.json.signer === node.owner;
   // cf4c372 VerifyMetadata: the payload names its signer as `operator` (the owner too, when it signs).

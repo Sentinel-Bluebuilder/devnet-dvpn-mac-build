@@ -5,6 +5,7 @@
 // guest agent are dropped, so a server reached over SSH (or RDP) becomes unreachable, and a reboot does not help.
 // So a CLI run from a remote session refuses to turn it on unless --allow-remote-lockout is given.
 import { CLI_NAME } from './cli-fail';
+import { remoteAncestry } from '../shared/remote-ancestry';
 
 export type RemoteKind = 'ssh' | 'rdp';
 
@@ -38,16 +39,23 @@ export function killSwitchRemoteRefusal(kind: RemoteKind, mode: string): Error &
   });
 }
 
+/** rc.10 KS-SUDO: the SSH_* / SESSIONNAME variables, then the login and the parent chain (they survive sudo and su). */
+export function remoteKind(env: NodeJS.ProcessEnv, platform: string, ancestry: (platform: string) => RemoteKind | null = remoteAncestry): RemoteKind | null {
+  return remoteSession(env, platform) ?? ancestry(platform);
+}
+
 /** daemon set: the refusal for this request, or null (off, no kill-switch flag, the override, or a local session). */
-export function ksRemoteCheck(mode: string | undefined, override: boolean, env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): Error | null {
+export function ksRemoteCheck(mode: string | undefined, override: boolean, env: NodeJS.ProcessEnv = process.env, platform: string = process.platform,
+  ancestry: (platform: string) => RemoteKind | null = remoteAncestry): Error | null {
   if ((mode !== 'on' && mode !== 'persist') || override) return null; // off, absent, or a bad value (a usage error later)
-  const kind = remoteSession(env, platform);
+  const kind = remoteKind(env, platform, ancestry);
   return kind ? killSwitchRemoteRefusal(kind, mode) : null;
 }
 
 /** agent status: the warning fields when the kill switch is on and this is a remote session; {} otherwise. */
-export function ksRemoteRiskFields(killSwitch: string | undefined, env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): { killSwitchRemoteRisk?: true; killSwitchRemoteNote?: string; restoreNetwork?: string } {
+export function ksRemoteRiskFields(killSwitch: string | undefined, env: NodeJS.ProcessEnv = process.env, platform: string = process.platform,
+  ancestry: (platform: string) => RemoteKind | null = remoteAncestry): { killSwitchRemoteRisk?: true; killSwitchRemoteNote?: string; restoreNetwork?: string } {
   if (killSwitch !== 'on' && killSwitch !== 'persist') return {};
-  const kind = remoteSession(env, platform);
+  const kind = remoteKind(env, platform, ancestry);
   return kind ? { killSwitchRemoteRisk: true, killSwitchRemoteNote: lockoutRisk(kind), restoreNetwork: KS_RESTORE } : {};
 }

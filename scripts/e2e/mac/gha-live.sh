@@ -200,7 +200,7 @@ row_keyfile_mode() {
 # (settlement.ts runSettlement signs with the OWNER key, no device key needed).
 HERE=$(cd "$(dirname "$0")" && pwd)
 SOL_RPC=${SOL_RPC:-https://api.devnet.solana.com}
-SWEEP_FEE=5000
+SWEEP_FEE=${SWEEP_FEE:-5000}   # one signature, no compute budget: the exact fee of sol_send_with_key
 DEVICE_KEY_DIR=${DEVICE_KEY_DIR:-/Library/Application Support/sentinel-dvpn/c0/keys}
 sol_rpc() { curl -s -m 20 "$SOL_RPC" -H 'content-type: application/json' -d "$1"; }
 openssl3() {
@@ -223,6 +223,46 @@ cleanup_revoke() {
   else record cleanup_revoke DIFFERS "device revoke failed: $(echo "$OUT" | head -c 300)"; fi
 }
 
+# ─── sol_send_with_key <key file> <from> <to> <lamports> <work dir>: one System transfer, signed with openssl ───
+# Exactly one signature and no compute-budget instructions, so the fee is exactly SWEEP_FEE and "balance - fee"
+# empties the account to 0 (the CLI adds a priority fee: R10-9). Deletes the key copy in <work> and <work> itself.
+# Sets SEND_SIG on success, SEND_ERR on failure (0 / 1).
+sol_send_with_key() {
+  local key=$1 from=$2 to=$3 amount=$4 work=$5 bh pem pub chk tx res sig st i ossl
+  SEND_SIG=''; SEND_ERR=''
+  ossl=$(openssl3) || { rm -P "$key" 2>/dev/null; rm -rf "$work"; SEND_ERR="no OpenSSL 3 (LibreSSL cannot sign ed25519 raw)"; return 1; }
+  bh=$(sol_rpc '{"jsonrpc":"2.0","id":1,"method":"getLatestBlockhash","params":[{"commitment":"confirmed"}]}' | jq -r '.result.value.blockhash // empty')
+  pem="$work/signer.pem"
+  if [ -z "$bh" ] || ! (umask 077; python3 -I "$HERE/soltx.py" "$key" "$from" "$bh" "$work" "$pem" sol "$to" "$amount" >/dev/null 2>"$work/build.err"); then
+    rm -P "$key" "$pem" 2>/dev/null; rm -rf "$work"; SEND_ERR="could not build the transfer (blockhash '${bh:-none}')"; return 1
+  fi
+  rm -P "$key" 2>/dev/null || rm -f "$key"
+  # W30: decode the built message and compare it with the intended transfer before signing
+  if ! chk=$(python3 -I "$HERE/soltx.py" check "$work/msg.bin" "$from" sol "$to" "$amount" 2>&1); then
+    rm -P "$pem" 2>/dev/null; rm -rf "$work"; SEND_ERR="built transfer differs from the intent: $chk; nothing signed"; return 1
+  fi
+  pub=$("$ossl" pkey -in "$pem" -pubout -outform DER | tail -c 32 | od -An -tx1 | tr -d ' 
+')
+  if [ "$pub" != "$(cat "$work/pub.hex")" ]; then
+    rm -P "$pem" 2>/dev/null; rm -rf "$work"; SEND_ERR="openssl derived another public key; not signing"; return 1
+  fi
+  "$ossl" pkeyutl -sign -inkey "$pem" -rawin -in "$work/msg.bin" -out "$work/sig.bin"
+  rm -P "$pem" 2>/dev/null || rm -f "$pem"
+  tx=$( (printf ''; cat "$work/sig.bin" "$work/msg.bin") | base64 | tr -d '
+')
+  rm -rf "$work"
+  res=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"sendTransaction\",\"params\":[\"$tx\",{\"encoding\":\"base64\",\"preflightCommitment\":\"confirmed\"}]}")
+  sig=$(echo "$res" | jq -r '.result // empty')
+  [ -n "$sig" ] || { SEND_ERR="sendTransaction refused: $(echo "$res" | jq -c '.error // .' | cut -c1-300)"; return 1; }
+  st=""; i=0
+  while [ $i -lt 30 ]; do
+    st=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getSignatureStatuses\",\"params\":[[\"$sig\"]]}" | jq -r '.result.value[0].confirmationStatus // empty')
+    case $st in confirmed|finalized) break ;; esac
+    sleep "${CONFIRM_POLL_S:-2}"; i=$((i+1))
+  done
+  case $st in confirmed|finalized) SEND_SIG=$sig; return 0 ;; esac
+  SEND_ERR="sent but not confirmed in 60 s, sig $sig"; return 1
+}
 cleanup_sweep() {
   RC=0
   local dev owner work key bh lamports amount pem pub chk tx res sig st i ossl f kp
@@ -244,45 +284,19 @@ cleanup_sweep() {
     rm -P "$key" 2>/dev/null || rm -f "$key"
   done < <(sudo find "$DEVICE_KEY_DIR" -maxdepth 2 -type f -name '*.json' -print0 2>/dev/null)
   if [ ! -f "$key" ]; then rm -rf "$work"; RC=1; record cleanup_sweep DIFFERS "no key under $DEVICE_KEY_DIR is device $dev; $lamports lamports left"; return; fi
-  bh=$(sol_rpc '{"jsonrpc":"2.0","id":1,"method":"getLatestBlockhash","params":[{"commitment":"confirmed"}]}' | jq -r '.result.value.blockhash // empty')
-  pem="$work/device.pem"
-  if [ -z "$bh" ] || ! (umask 077; python3 -I "$HERE/soltx.py" "$key" "$dev" "$bh" "$work" "$pem" sol "$owner" "$amount" >/dev/null 2>"$work/build.err"); then
-    rm -P "$key" "$pem" 2>/dev/null; rm -rf "$work"; RC=1; record cleanup_sweep DIFFERS "could not build the sweep (blockhash '${bh:-none}')"; return
-  fi
-  rm -P "$key" 2>/dev/null || rm -f "$key"
-  # W30: decode the built message and compare it with the intended transfer before signing
-  if ! chk=$(python3 -I "$HERE/soltx.py" check "$work/msg.bin" "$dev" sol "$owner" "$amount" 2>&1); then
-    rm -P "$pem" 2>/dev/null; rm -rf "$work"; RC=1; record cleanup_sweep DIFFERS "built sweep differs from the intent: $chk; nothing signed"; return
-  fi
-  pub=$("$ossl" pkey -in "$pem" -pubout -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n')
-  if [ "$pub" != "$(cat "$work/pub.hex")" ]; then
-    rm -P "$pem" 2>/dev/null; rm -rf "$work"; RC=1; record cleanup_sweep DIFFERS "openssl derived another public key; not signing"; return
-  fi
-  "$ossl" pkeyutl -sign -inkey "$pem" -rawin -in "$work/msg.bin" -out "$work/sig.bin"
-  rm -P "$pem" 2>/dev/null || rm -f "$pem"
-  tx=$( (printf '\001'; cat "$work/sig.bin" "$work/msg.bin") | base64 | tr -d '\n')
-  rm -rf "$work"
-  res=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"sendTransaction\",\"params\":[\"$tx\",{\"encoding\":\"base64\",\"preflightCommitment\":\"confirmed\"}]}")
-  sig=$(echo "$res" | jq -r '.result // empty')
-  [ -n "$sig" ] || { RC=1; record cleanup_sweep DIFFERS "sendTransaction refused: $(echo "$res" | jq -c '.error // .' | cut -c1-300)"; return; }
-  st=""; i=0
-  while [ $i -lt 30 ]; do
-    st=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getSignatureStatuses\",\"params\":[[\"$sig\"]]}" | jq -r '.result.value[0].confirmationStatus // empty')
-    case $st in confirmed|finalized) break ;; esac
-    sleep 2; i=$((i+1))
-  done
-  case $st in
-    confirmed|finalized) record cleanup_sweep PASS "swept $amount lamports device $dev → owner $owner, sig $sig" ;;
-    *) RC=1; record cleanup_sweep DIFFERS "sweep sent but not confirmed in 60 s, sig $sig" ;;
-  esac
+  if sol_send_with_key "$key" "$dev" "$owner" "$amount" "$work"; then
+    record cleanup_sweep PASS "swept $amount lamports device $dev → owner $owner, sig $SEND_SIG"
+  else RC=1; record cleanup_sweep DIFFERS "$SEND_ERR"; fi
 }
 
 # sweep_leftovers: every throwaway wallet key in $LEFTOVER sends all its tDVPN, then all its SOL (--allow-empty, less
 # the fee) to the owner; the key is deleted only when its balance reads <= LEFTOVER_DUST lamports. Runs 44843609674 and
 # 44846196847 stranded 0.039995 + 0.0717962 SOL: the row's SOL return lacked --allow-empty and the key was deleted anyway.
 LEFTOVER_DUST=${LEFTOVER_DUST:-10000}
+LEFTOVER_TRIES=${LEFTOVER_TRIES:-3}
+LEFTOVER_ESCROW_PUB=${LEFTOVER_ESCROW_PUB:-$HERE/leftover-escrow-pub.txt}
 sweep_leftovers() {
-  local k addr owner d tdv lam amt left n=0 kept=0
+  local k addr owner d tdv lam w left t n=0 kept=0 esc=0
   owner=$(get owner); [ -n "$owner" ] || owner=$("$CLI" wallet show --json 2>/dev/null | jq -r '.owner // .address // empty' 2>/dev/null)
   for k in "$LEFTOVER"/*.json; do
     [ -f "$k" ] || continue
@@ -294,12 +308,21 @@ sweep_leftovers() {
       DVPN_KEYFILE="$k" DVPN_DATA_DIR="$d" "$CLI" wallet send --to "$owner" --tdvpn "$tdv" --yes --json >>"$EV/leftover.out" 2>&1 || echo "leftover $addr: tDVPN send exit $?" >>"$EV/leftover.out"
       sleep "$TX_GAP"
     fi
-    lam=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"$addr\",{\"commitment\":\"confirmed\"}]}" | jq -r '.result.value // empty')
-    if [ -n "$lam" ] && [ "$lam" -gt "$LEFTOVER_DUST" ]; then
-      amt=$(awk -v l="$lam" -v f="$LEFTOVER_DUST" 'BEGIN { printf "%.9f", (l - f) / 1e9 }')
-      DVPN_KEYFILE="$k" DVPN_DATA_DIR="$d" "$CLI" wallet send --to "$owner" --sol "$amt" --allow-empty --yes --json >>"$EV/leftover.out" 2>&1 || echo "leftover $addr: SOL send exit $?" >>"$EV/leftover.out"
-      sleep "$TX_GAP"
-    fi
+    # M33-15: up to LEFTOVER_TRIES attempts (a fresh balance and blockhash each, backoff TX_GAP * try), so a
+    # transient RPC error or an unconfirmed send does not strand the wallet.
+    t=1
+    while [ "$t" -le "$LEFTOVER_TRIES" ]; do
+      lam=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"$addr\",{\"commitment\":\"confirmed\"}]}" | jq -r '.result.value // empty')
+      [ -n "$lam" ] && [ "$lam" -le "$LEFTOVER_DUST" ] && break
+      if [ -n "$lam" ]; then
+        # R10-9: our own one-signature transfer of balance - fee, so the account ends at exactly 0 (dust under rent
+        # is refused by the chain: InsufficientFundsForRent, run 44862462145).
+        w=$(umask 077; mktemp -d "${TMPDIR:-/tmp}/lo-send.XXXXXX"); (umask 077; cp "$k" "$w/key.json")
+        if sol_send_with_key "$w/key.json" "$addr" "$owner" "$((lam - SWEEP_FEE))" "$w"; then echo "leftover $addr: try $t: SOL $((lam - SWEEP_FEE)) lamports sent, sig $SEND_SIG" >>"$EV/leftover.out"
+        else echo "leftover $addr: try $t: SOL send failed: $SEND_ERR" >>"$EV/leftover.out"; fi
+      else echo "leftover $addr: try $t: balance unreadable" >>"$EV/leftover.out"; fi
+      sleep $((TX_GAP * t)); t=$((t + 1))
+    done
     left=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"$addr\",{\"commitment\":\"confirmed\"}]}" | jq -r '.result.value // empty')
     rm -rf -- "$d"
     if [ -n "$left" ] && [ "$left" -le "$LEFTOVER_DUST" ]; then
@@ -307,16 +330,37 @@ sweep_leftovers() {
       echo "leftover $addr: emptied to $owner ($left lamports left), key deleted" >>"$EV/leftover.out"
     else
       kept=$((kept + 1)); echo "leftover $addr: ${left:-unknown} lamports left, key KEPT at $k" >>"$EV/leftover.out"
+      # M33-15: say it in the job log NOW, before the runner (and the plain key) goes away
+      [ -z "${GITHUB_ACTIONS:-}" ] || echo "::error::throwaway wallet $addr not emptied (${left:-unknown} lamports): escrowing its key to ctl; recover with scripts/ci/leftover-recover.sh"
+      # M33-15 last resort: the runner (and $LEFTOVER with it) is destroyed after the job, so put an ENCRYPTED copy
+      # in the uploaded evidence. Only ctl holds the private half (~/mac-escrow/escrow.key); ctl sweeps it with
+      # scripts/ci/leftover-recover.sh. The plaintext key never enters the evidence.
+      if escrow_key "$k" "$addr"; then esc=$((esc + 1)); echo "leftover $addr: key escrowed (encrypted) for ctl" >>"$EV/leftover.out"
+      else echo "leftover $addr: ESCROW FAILED: $ESCROW_ERR" >>"$EV/leftover.out"; fi
     fi
   done
   [ "$n" = 0 ] && return 0
   RC=$kept
   if [ "$kept" = 0 ]; then record leftover_sweep PASS "$n throwaway wallet(s) emptied to $owner, keys deleted (see leftover.out)"
-  else record leftover_sweep DIFFERS "$kept of $n throwaway wallet(s) not emptied; keys kept in $LEFTOVER (see leftover.out)"; fi
+  else record leftover_sweep DIFFERS "$kept of $n throwaway wallet(s) not emptied after $LEFTOVER_TRIES tries; $esc of them escrowed (encrypted) to ctl in leftover-escrow/ (see leftover.out)"; fi
+}
+
+# ─── escrow_key <key file> <address>: RSA-OAEP(SHA-256) encrypt to the ctl-held public key, into $EV/leftover-escrow ───
+# A Solana key file is ~230 bytes, under the 446-byte limit of a single RSA-4096 OAEP-SHA256 block. Sets ESCROW_ERR.
+escrow_key() {
+  local k=$1 addr=$2 ossl out
+  ESCROW_ERR=''
+  [ -s "$LEFTOVER_ESCROW_PUB" ] || { ESCROW_ERR="no public key at $LEFTOVER_ESCROW_PUB"; return 1; }
+  ossl=$(openssl3) || { ESCROW_ERR='no OpenSSL 3'; return 1; }
+  [ "$(wc -c <"$k" | tr -d ' ')" -le 446 ] || { ESCROW_ERR="key file over 446 bytes (one RSA-4096 OAEP block)"; return 1; }
+  mkdir -p "$EV/leftover-escrow"; out="$EV/leftover-escrow/b-$addr.json.enc"
+  "$ossl" pkeyutl -encrypt -pubin -inkey "$LEFTOVER_ESCROW_PUB" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256     -in "$k" -out "$out" 2>"$EV/leftover-escrow/.err" || { ESCROW_ERR="encrypt failed: $(head -c 200 "$EV/leftover-escrow/.err")"; rm -f "$out"; return 1; }
+  rm -f "$EV/leftover-escrow/.err"
+  [ -s "$out" ] || { ESCROW_ERR='empty output'; return 1; }
 }
 
 cleanup() {
-  [ "$(get cleaned)" = 1 ] && { sweep_leftovers; write_result; return; }
+  [ "$(get cleaned)" = 1 ] && { sweep_leftovers; write_result; verdict_gate; return; }
   chmod 600 "$DVPN_KEYFILE" 2>/dev/null || echo "cleanup: chmod 600 on the key failed" >&2
   "$CLI" agent down --yes --json >"$EV/cleanup_down.out" 2>&1 || echo "cleanup: agent down exit $?" >&2
   "$CLI" daemon restore-network --json >"$EV/cleanup_restore.out" 2>&1 || echo "cleanup: restore-network exit $?" >&2
@@ -332,8 +376,38 @@ cleanup() {
   sweep_leftovers
   put cleaned 1
   write_result
+  verdict_gate
 }
 
+# R10-12 (run 44862462145: "Live rows" was green with 4 DIFFERS; class 8, vacuous pass): print the verdict counts and
+# fail the step on any non-PASS row that is not declared. EXPECTED_DIFFERS is EMPTY by default; each entry is
+# "<row>=<rc10 row id>:<reason>" separated by ';', and a declared entry with no reason or row id is itself a failure.
+verdict_gate() {
+  local counts bad r e ok rid why rest
+  counts=$(jq -s -c 'group_by(.verdict) | map({(.[0].verdict): length}) | add // {}' "$EV/rows.jsonl" 2>/dev/null)
+  echo "VERDICTS: ${counts:-?}"
+  bad=0
+  # M33-19: no arrays (an empty "${a[@]}" aborts under set -u on Apple's bash 3.2); entries split by tr, read one per line
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    ok=0
+    while IFS= read -r e; do
+      [ "${e%%=*}" = "$r" ] || continue
+      # M33-18: "<row>=<row id>:<reason>", both non-empty; "row=R10-5" (no reason) is refused
+      rest=${e#*=}
+      case $rest in
+        *:*) rid=${rest%%:*}; why=${rest#*:} ;;
+        *) rid=''; why='' ;;
+      esac
+      if [ -n "$rid" ] && [ -n "$why" ]; then ok=1; echo "expected DIFFERS: $r ($rid: $why)"
+      else echo "EXPECTED_DIFFERS entry for $r needs <row id>:<reason>: '$e'" >&2; fi
+    done < <(printf '%s
+' "${EXPECTED_DIFFERS:-}" | tr ';' '
+')
+    [ "$ok" = 1 ] || { echo "UNEXPECTED non-PASS row: $r" >&2; bad=$((bad + 1)); }
+  done < <(jq -r 'select(.verdict != "PASS") | .row' "$EV/rows.jsonl" 2>/dev/null | sort -u)
+  [ "$bad" = 0 ] || { echo "verdict gate: $bad unexpected non-PASS row(s): the step fails" >&2; exit 1; }
+}
 write_result() {
   local pass differs
   pass=$(jq -s '[.[] | select(.verdict=="PASS")] | length' "$EV/rows.jsonl")

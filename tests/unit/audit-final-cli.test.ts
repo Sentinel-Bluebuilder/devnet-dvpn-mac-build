@@ -38,7 +38,7 @@ describe('AUD-2: final audit M rows', () => {
   it('M11: a read-only key file names both ways it was set, and a Windows command', () => {
     let e: (Error & { action?: string }) | null = null;
     try { cliKeyStore('/tmp', '/tmp/k.json').save({} as never); } catch (err) { e = err as Error & { action?: string }; }
-    expect(e?.action).toMatch(/drop --keyfile and unset DVPN_KEYFILE \(PowerShell: Remove-Item Env:DVPN_KEYFILE\)/);
+    expect(e?.action).toMatch(/drop --keyfile and (run )?unset DVPN_KEYFILE/); // #33: the macOS line names no PowerShell (M33-11, tests/platform/darwin/rc9f-mac.test.ts)
   });
   it('M12: local refusals say nothing was sent', () => {
     expect(moneyOf('device-key-unreadable')).toBe('none');

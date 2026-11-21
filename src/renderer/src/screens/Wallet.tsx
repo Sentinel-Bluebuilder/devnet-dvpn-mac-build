@@ -143,7 +143,14 @@ export function Wallet({ snap }: { snap: AppSnapshot }) {
 
       {modal === 'send' && (
         <ConfirmModal title={tr('Send')} lines={[tr('Send {amount} {asset} to {address}.', { amount: amt, asset: asset === 'sol' ? 'SOL' : 'tDVPN', address: to.trim() }), tr('Transfers can’t be reversed.'), tr('Network: Solana devnet (test tokens).')]} confirmLabel={tr('Send')}
-          onConfirm={async () => { await call(window.api.IPC.SEND, { to: to.trim(), [asset]: amt, confirmed: true }); useApp.getState().toast('success', sendToast(amt, asset, to.trim())); setTo(''); setAmt(''); }} onClose={() => setModal(null)} />
+          onConfirm={async () => {
+            try { await call(window.api.IPC.SEND, { to: to.trim(), [asset]: amt, confirmed: true }); useApp.getState().toast('success', sendToast(amt, asset, to.trim())); setTo(''); setAmt(''); } catch (err) {
+              // TX-LAND (rc9-f2 H): not known whether it went through. No "Try again" here: a second Send signs a NEW
+              // transfer. The modal closes and the amount is cleared; the error says to check the balances first.
+              if ((err as { code?: string }).code === 'tx-unknown') { setAmt(''); return; }
+              throw err;
+            }
+          }} onClose={() => setModal(null)} />
       )}
       {modal === 'withdraw' && (
         <ConfirmModal title={tr('Claim refunds')} lines={[tr('Claim {amount} tDVPN of finished refunds. They move into your wallet balance.', { amount: tdvpn(w?.userBalance ?? '0') })]} confirmLabel={tr('Claim refunds')}

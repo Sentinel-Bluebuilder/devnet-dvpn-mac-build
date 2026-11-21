@@ -15,7 +15,7 @@ describe('setup-daemon.sh staging links', () => {
   it('refuses a staged copy that holds a symlink, before it reaches the home', () => {
     const check = at(/find "\$copy" -type l/);
     expect(check).toBeGreaterThan(-1);
-    expect(at(/cp -Rp "\$STAGING\/\." "\$copy\/"/)).toBeLessThan(check);
+    expect(at(/copy_as_user "\$USER_NAME" "\$STAGING" "\$copy"/)).toBeLessThan(check); // M33-1: read as the user (rc9f-mac.test.ts)
     expect(at(/cp -Rp "\$copy\/\." "\$HOME_DIR\/"/)).toBeGreaterThan(check);
   });
 

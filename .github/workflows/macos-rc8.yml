@@ -81,6 +81,15 @@ jobs:
           set -o pipefail
           npx vitest run tests/unit tests/platform 2>&1 | tee unit-tests.log
 
+      # M33-15 / M33-18 / M33-19: the live harness's sweep, escrow and verdict gate against a fake RPC, with the
+      # live step run by Apple's /bin/bash 3.2 (set -u, empty EXPECTED_DIFFERS). No chain, no key of ours.
+      - name: Harness tests (fake RPC, Apple bash 3.2)
+        run: |
+          set -o pipefail
+          export PATH="$(brew --prefix openssl@3)/bin:$PATH"
+          /bin/bash --version | head -1
+          BASH32=/bin/bash bash scripts/ci/leftover-sweep-test.sh "$PWD" 2>&1 | tee harness-tests.log
+
       - name: Pinned darwin binaries from the rc.4 arm64 zip
         env:
           GH_TOKEN: ${{ github.token }}
@@ -157,6 +166,7 @@ jobs:
             dist/SHA256SUMS.txt
             typecheck.log
             unit-tests.log
+            harness-tests.log
             release.log
 
   live:

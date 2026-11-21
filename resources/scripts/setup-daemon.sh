@@ -26,10 +26,22 @@ LABEL="${ARG_Label:-$LABEL}"; PLIST="/Library/LaunchDaemons/$LABEL.plist"
 
 [ -f "$DVPND" ] && [ -x "$DVPND" ] || die "sentinel-dvpnd not found at $DVPND"
 [ "$(basename "$DVPND")" = sentinel-dvpnd ] || die 'unexpected daemon binary name'
+# L32-1 class (rc9-f-mac hardening, L on macOS: every way in already needs an admin password): root runs --Dvpnd and
+# installs --BinRoot's tools as the service, so both are pinned to the bin folder of the bundle this script runs from
+# (<Resources>/scripts next to <Resources>/bin), never a path the caller picks. A dev DVPND_BIN is refused here.
+BUNDLE_BIN="$(cd -P -- "$HERE/../bin" 2>/dev/null && pwd -P)" || die "no bin folder next to $HERE"
+[ "$(cd -P -- "$(dirname -- "$DVPND")" && pwd -P)/sentinel-dvpnd" = "$BUNDLE_BIN/sentinel-dvpnd" ] && [ ! -L "$DVPND" ] \
+  || die "sentinel-dvpnd must be the app's own ($BUNDLE_BIN/sentinel-dvpnd), not $DVPND"
+if [ -n "$BIN_ROOT" ]; then
+  [ "$(cd -P -- "$BIN_ROOT" 2>/dev/null && pwd -P)" = "$BUNDLE_BIN" ] || die "the tools folder must be the app's own ($BUNDLE_BIN), not $BIN_ROOT"
+fi
 [[ "$INSTANCE" =~ ^c[0-9]+$ ]] || die "bad instance tag $INSTANCE"
 under "$HOME_DIR" "$DAEMON_ROOT" || die "daemon home must be under $DAEMON_ROOT"
 [[ "$GROUP" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "bad group name $GROUP"
-if [ -n "$USER_NAME" ]; then id -u "$USER_NAME" >/dev/null 2>&1 || die "no such user $USER_NAME"; fi
+if [ -n "$USER_NAME" ]; then
+  id -u "$USER_NAME" >/dev/null 2>&1 || die "no such user $USER_NAME"
+  user_is_asker "$USER_NAME" || die "--User $USER_NAME is not the account that asked for this step (or is root)"
+fi
 # rc9-d (run 44843609674 sw_install_a; AC-LINUX loop): `daemon install --yes` with the service installed and nothing
 # staged died "staging folder not found", and doctor's next led back to it. An installed home with NO staging folder is
 # a re-install of that home (owner set, binaries + LaunchDaemon refreshed), as with no --Staging. Only a path that does
@@ -41,6 +53,8 @@ fi
 # Staging is deleted as root at the end: only ever the app's own daemon-staging folder (first setup) or
 # daemon-switch folder (wallet switch, #31 rc.4 E-55 switchHome), no link.
 if [ -n "$STAGING" ]; then
+  # M33-1 / M33-13 (rc9-f-mac): a staged home is read with ITS user's rights, so the user must be named
+  [ -n "$USER_NAME" ] || die "a staged home needs --User (the account that staged it): $STAGING"
   [[ "$STAGING" == /Users/?*/daemon-staging || "$STAGING" == /Users/?*/daemon-switch ]] || die "unexpected staging folder $STAGING"
   [[ "$STAGING" != *..* ]] && [ ! -L "$STAGING" ] || die "unsafe staging folder $STAGING"
   # AUDIT-FINAL-MACOS M8: the glob is on the string (`*` crosses `/`) and -L checks the last part only, so a symlinked
@@ -50,8 +64,7 @@ if [ -n "$STAGING" ]; then
   [ "$staging_real" = "$STAGING" ] || die "unsafe staging folder $STAGING (resolves to $staging_real)"
   case "$(basename -- "$staging_real")" in daemon-staging|daemon-switch) ;; *) die "unexpected staging folder $STAGING" ;; esac
   if [ -n "$USER_NAME" ]; then
-    user_home="$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
-    user_home_real="$(cd -P -- "${user_home:-/nonexistent}" 2>/dev/null && pwd -P)" || die "no home folder for $USER_NAME"
+    user_home_real="$(real_home "$USER_NAME")" || die "no home folder for $USER_NAME"
     case "$staging_real" in "$user_home_real"/?*) ;; *) die "staging folder $STAGING is not under $USER_NAME's home $user_home_real" ;; esac
   fi
 fi
@@ -83,9 +96,14 @@ if [ ! -f "$HOME_DIR/config.toml" ]; then
   # device.pub and migrates config.toml, which would follow a planted link to a root file. Copy into a
   # root-owned folder first (the user can no longer change it), refuse any link there, then copy on.
   copy="$(mktemp -d "$DAEMON_ROOT/.staged.XXXXXX")" || die 'could not make a folder for the staged home'
-  cp -Rp "$STAGING/." "$copy/" || { rm -rf -- "$copy"; die 'could not copy the staged home'; }
+  # M33-1 (rc9-f-mac): read by the user's own tar (_lib.sh copy_as_user), never by root's cp: a file hard-linked to
+  # a root-only file fails there. Root only unpacks the stream; a link (symbolic or hard) in it is refused below.
+  copy_as_user "$USER_NAME" "$STAGING" "$copy" || { rm -rf -- "$copy"; die "could not read the staged home as $USER_NAME (a file in it is not that user's to read): $STAGING"; }
   if [ -n "$(find "$copy" -type l -print 2>/dev/null | head -1)" ]; then
     rm -rf -- "$copy"; die "the staged home holds a symbolic link; refusing it: $STAGING"
+  fi
+  if has_hardlink "$copy"; then
+    rm -rf -- "$copy"; die "the staged home holds a hard link; refusing it: $STAGING"
   fi
   cp -Rp "$copy/." "$HOME_DIR/" || { rm -rf -- "$copy"; die 'could not copy the staged home'; }
   rm -rf -- "$copy"

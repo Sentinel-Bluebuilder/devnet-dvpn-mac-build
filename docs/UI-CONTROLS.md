@@ -25,7 +25,7 @@ CLI needs `--yes`). "Tests" = test scripts or unit tests that run the CLI comman
 | `app:open-external` | ui | ipc.ts:81 `URL` `openExternal` `toString` | none: opens a link in the browser; the CLI prints links instead | — | components/BuiltOnSentinel:17, components/SidebarFooter:57, components/SidebarFooter:60, Home:158, Settings:345, Settings:347 +3 |
 | `app:copy` | ui | ipc.ts:86 `writeText` `Q0324` `sharing` | none: clipboard; the CLI prints the value | — | components/SidebarFooter:57, components/SidebarFooter:60, components/ui:203, components/ui:220, Cli:123, Cli:125 +3 |
 | `app:protect-screen` | ui | ipc.ts:89 `for` `getAllWindows` `setContentProtection` | none: window capture guard; the CLI prints the phrase in your own terminal | — | no button: loaded by a screen |
-| `state:snapshot` | readonly | ipc.ts:91 `ownerAddress` `snapshot` `patch` | `status` | agent-cmd.test.ts, agent-contract.test.ts, agent-no-dead-end.test.ts, agent-props.test.ts | components/ConnectSheet:233 |
+| `state:snapshot` | readonly | ipc.ts:91 `ownerAddress` `snapshot` `patch` | `status` | agent-cmd.test.ts, agent-commands-doc-c3.test.ts, agent-contract.test.ts, agent-no-dead-end.test.ts | components/ConnectSheet:233 |
 | `nodes:list` | readonly | ipc.ts:97 `nodeViews` | `nodes list --no-probe` | agent-cmd.test.ts, agent-no-dead-end.test.ts, cli-fresh-agent-wording.test.ts, cli-round2.test.ts | Nodes:151 |
 | `nodes:refresh` | readonly | ipc.ts:98 `refreshNodes` | `nodes list` | agent-cmd.test.ts, agent-no-dead-end.test.ts, cli-fresh-agent-wording.test.ts, cli-round2.test.ts | Nodes:93 |
 | `plans:list` | readonly | ipc.ts:99 `cachedPlans` `refreshPlans` `Refresh` | `plans list` | market-defaults.test.ts | no button: loaded by a screen |
@@ -50,7 +50,7 @@ CLI needs `--yes`). "Tests" = test scripts or unit tests that run the CLI comman
 | `node-test:history` | readonly | ipc.ts:177 `listRuns` `getRun` `nodeTestRunning` | `test history`, `test show` | **no CLI test** | NodeTest:305, NodeTest:313 |
 | `apps:list` | readonly | ipc.ts:126 `isArray` `listApps` `all` | `split apps` | **no CLI test** | SplitTunnel:209 |
 | `dns:probe` | readonly | ipc.ts:149 `isArray` `probeDns` `dnsProbeProblem` | `daemon dns-check` | **no CLI test** | no button: loaded by a screen |
-| `settle:list` | readonly | ipc.ts:138 `isWalletAddress` `tr` `readSettlements` | `settle list` | cli-settle-row.test.ts | Wallet:124, Wallet:162, Wallet:166 |
+| `settle:list` | readonly | ipc.ts:138 `isWalletAddress` `tr` `readSettlements` | `settle list` | cli-settle-row.test.ts | Wallet:124, Wallet:169, Wallet:173 |
 | `apps:pick` | local | ipc.ts:208 `getFocusedWindow` `pick` `matches` | none: MISSING | — | SplitTunnel:236 |
 | `settings:get` | local | ipc.ts:180 `getSettings` | `settings get` | **no CLI test** | no button: loaded by a screen |
 | `settings:set` | local | ipc.ts:181 `updateSettings` | `settings set` | **no CLI test** | components/PollSettings:36, components/PollSettings:43, components/SidebarFooter:78, components/SidebarFooter:81, Settings:176, Settings:182 +24 |
@@ -62,7 +62,7 @@ CLI needs `--yes`). "Tests" = test scripts or unit tests that run the CLI comman
 | `wallet:create` | local | ipc.ts:218 `createWallet` `refreshNow` | `wallet create` | agent-cmd.test.ts, state-matrix.test.ts | Onboarding:245 |
 | `wallet:import` | local | ipc.ts:219 `importWallet` `refreshNow` | `wallet import` | **no CLI test** | Onboarding:229 |
 | `wallet:import-file` | local | ipc.ts:221 `getFocusedWindow` `tr` `only` | `wallet import` | **no CLI test** | Onboarding:253 |
-| `wallet:logout` | local | ipc.ts:235 `logout` `refreshWallet` | `wallet logout` | **no CLI test** | Onboarding:152, Wallet:170 |
+| `wallet:logout` | local | ipc.ts:235 `logout` `refreshWallet` | `wallet logout` | **no CLI test** | Onboarding:152, Wallet:177 |
 | `node-test:stop` | local | ipc.ts:179 `stopNodeTest` | `test stop` | **no CLI test** | NodeTest:245 |
 | `daemon-settings:apply` | privileged | ipc.ts:237 `getDaemonSettings` `redactUrls` `some` | `daemon set` | agent-cmd.test.ts | no button: loaded by a screen |
 | `daemon:init` | privileged | ipc.ts:249 `ownerAddress` `tr` `button` | `daemon init`, `daemon install`, `device register` | cli-device-hint.test.ts, agent-cmd.test.ts, cli-press-service.test.ts, market-defaults.test.ts | App:131, components/InstallServiceButton:25, Diagnostics:230, Onboarding:289, Onboarding:300, Onboarding:311 |
@@ -72,12 +72,12 @@ CLI needs `--yes`). "Tests" = test scripts or unit tests that run the CLI comman
 | `device:discard-setup` | local | ipc.ts:294 `discardSetup` `refreshWallet` | `device discard-setup` | cli-device-switch.test.ts | Diagnostics:242 |
 | `session:connect` | spend | ipc.ts:296 `connect` | `connect`, `connect --plan`, `connect --switch` | agent-cmd.test.ts, cli-action-hint.test.ts, cli-args-strict.test.ts, cli-audit-u23.test.ts | components/ConnectSheet:233, android/SplitTunnelAndroid:148, android/SplitTunnelAndroid:148, android/SplitTunnelAndroid:149 |
 | `session:disconnect` | spend | ipc.ts:297 `cancelConnect` `disconnect` | `disconnect`, `disconnect` | cli-disconnect-ks-persist.test.ts, cli-fresh-agent-wording.test.ts, reconcile-shown-session.test.ts, state-matrix.test.ts | Home:212, Home:213 |
-| `device:setup` | spend | ipc.ts:299 `deviceSetup` `refreshNow` `wallet` | `device setup` | agent-cmd.test.ts, agent-contract.test.ts, cli-audit-u23.test.ts, cli-device-hint.test.ts | Wallet:154 |
+| `device:setup` | spend | ipc.ts:299 `deviceSetup` `refreshNow` `wallet` | `device setup` | agent-cmd.test.ts, agent-commands-doc-c3.test.ts, agent-contract.test.ts, cli-audit-u23.test.ts | Wallet:161 |
 | `device:setup-plan` | readonly | ipc.ts:298 `deviceSetupPlan` `getSettings` | `device plan` | device-default-cap.test.ts, device-keep-limit.test.ts, device-next-flags.test.ts | Wallet:104 |
-| `device:revoke` | spend | ipc.ts:301 `revokeOtherDevice` `revokeDeviceAccess` | `device revoke` | agent-cmd.test.ts, state-matrix.test.ts | Wallet:158, Wallet:162 |
+| `device:revoke` | spend | ipc.ts:301 `revokeOtherDevice` `revokeDeviceAccess` | `device revoke` | agent-cmd.test.ts, state-matrix.test.ts | Wallet:165, Wallet:169 |
 | `plans:subscribe` | spend | ipc.ts:303 `closeSub` `subscribe` `amount` | `plans subscribe`, `plans close` | cli-audit-u23.test.ts | Plans:107, Plans:119 |
-| `settle:run` | spend | ipc.ts:305 `isWalletAddress` `tr` `AUDIT` | `settle run` | agent-cmd.test.ts, cli-fresh-agent-wording.test.ts, cli-round2.test.ts, cli-unknown-flags.test.ts | Activity:172, Wallet:166 |
-| `wallet:withdraw` | spend | ipc.ts:316 `withdraw` `readSettlements` `refreshNow` | `settle withdraw` | agent-cmd.test.ts | Wallet:150 |
+| `settle:run` | spend | ipc.ts:305 `isWalletAddress` `tr` `AUDIT` | `settle run` | agent-cmd.test.ts, cli-fresh-agent-wording.test.ts, cli-round2.test.ts, cli-unknown-flags.test.ts | Activity:172, Wallet:173 |
+| `wallet:withdraw` | spend | ipc.ts:316 `withdraw` `readSettlements` `refreshNow` | `settle withdraw` | agent-cmd.test.ts | Wallet:157 |
 | `channel:fund` | spend | ipc.ts:317 `fundChannel` | `channels fund` | cli-audit-u23.test.ts | Activity:189 |
 | `wallet:send` | spend | ipc.ts:318 `send` | `wallet send` | cli-audit-u23.test.ts | Wallet:146 |
 | `node-test:run` | spend | ipc.ts:320 `broadcast` `limit` `runNodeTest` | `test run` | **no CLI test** | NodeTest:326, NodeTest:338 |
@@ -375,19 +375,19 @@ CLI needs `--yes`). "Tests" = test scripts or unit tests that run the CLI comman
 | screens/Wallet.tsx:132 | button onClick | Refund that device\ |  | local |
 | screens/Wallet.tsx:141 | button onClick | Sign out of this wallet |  | local |
 | screens/Wallet.tsx:146 | ConfirmModal onConfirm | (no label) |  | `wallet:send` |
-| screens/Wallet.tsx:146 | ConfirmModal onClose | (no label) |  | local |
-| screens/Wallet.tsx:150 | ConfirmModal onConfirm | (no label) |  | `wallet:withdraw` |
-| screens/Wallet.tsx:150 | ConfirmModal onClose | (no label) |  | local |
-| screens/Wallet.tsx:154 | ConfirmModal onConfirm | (no label) |  | `device:setup` |
-| screens/Wallet.tsx:154 | ConfirmModal onClose | (no label) |  | local |
-| screens/Wallet.tsx:158 | ConfirmModal onConfirm | (no label) |  | `device:revoke` |
-| screens/Wallet.tsx:158 | ConfirmModal onClose | (no label) |  | local |
-| screens/Wallet.tsx:162 | ConfirmModal onConfirm | (no label) |  | `device:revoke`, `settle:list` |
-| screens/Wallet.tsx:162 | ConfirmModal onClose | (no label) |  | local |
-| screens/Wallet.tsx:166 | ConfirmModal onConfirm | (no label) |  | `settle:list`, `settle:run` |
-| screens/Wallet.tsx:166 | ConfirmModal onClose | (no label) |  | local |
-| screens/Wallet.tsx:170 | ConfirmModal onConfirm | (no label) |  | `wallet:logout` |
-| screens/Wallet.tsx:170 | ConfirmModal onClose | (no label) |  | local |
+| screens/Wallet.tsx:153 | ConfirmModal onClose | (no label) |  | local |
+| screens/Wallet.tsx:157 | ConfirmModal onConfirm | (no label) |  | `wallet:withdraw` |
+| screens/Wallet.tsx:157 | ConfirmModal onClose | (no label) |  | local |
+| screens/Wallet.tsx:161 | ConfirmModal onConfirm | (no label) |  | `device:setup` |
+| screens/Wallet.tsx:161 | ConfirmModal onClose | (no label) |  | local |
+| screens/Wallet.tsx:165 | ConfirmModal onConfirm | (no label) |  | `device:revoke` |
+| screens/Wallet.tsx:165 | ConfirmModal onClose | (no label) |  | local |
+| screens/Wallet.tsx:169 | ConfirmModal onConfirm | (no label) |  | `device:revoke`, `settle:list` |
+| screens/Wallet.tsx:169 | ConfirmModal onClose | (no label) |  | local |
+| screens/Wallet.tsx:173 | ConfirmModal onConfirm | (no label) |  | `settle:list`, `settle:run` |
+| screens/Wallet.tsx:173 | ConfirmModal onClose | (no label) |  | local |
+| screens/Wallet.tsx:177 | ConfirmModal onConfirm | (no label) |  | `wallet:logout` |
+| screens/Wallet.tsx:177 | ConfirmModal onClose | (no label) |  | local |
 | screens/android/AboutAndroid.tsx:32 | button onClick | sentinel.co |  | `app:open-external` |
 | screens/android/AboutAndroid.tsx:35 | button onClick | Open-source licences | `data-notices-open` | local |
 | screens/android/AboutAndroid.tsx:42 | button onClick | Close |  | local |

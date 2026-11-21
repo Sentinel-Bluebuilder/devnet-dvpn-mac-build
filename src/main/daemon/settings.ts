@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseConfig, parseWholeDevice, readToml, renderConfig, renderServiceConfig, TUN_SERVICES, validateForApply, type DaemonSettings } from '../../core/daemon/config';
 import { fullSplit, splitNotApplied } from '../../core/session/state';
-import { DEFAULT_DAEMON_HOME, SERVICE_NAME, daemonInfo, deviceRecord, relinkDaemon, scriptPath } from './manager';
+import { DEFAULT_DAEMON_HOME, SERVICE_NAME, daemonInfo, deviceRecord, loginName, relinkDaemon, scriptPath } from './manager';
 import { runElevated } from '../system/elevate';
 import { log } from '../logger';
 import { getHost } from '../host';
@@ -149,7 +149,9 @@ export async function applyDaemonSettings(next: DaemonSettings): Promise<{ ok: b
       fs.writeFileSync(path.join(staged, `${s}.config.toml`), renderServiceConfig(text, next.wholeDevice), 'utf8');
     }
   }
-  const r = await runElevated(scriptPath('apply-daemon-config.sh'), { Staged: staged, DaemonHome: home(), Service: SERVICE_NAME });
+  // M33-1 (rc9-f-mac): --User = whose rights read the staged files; the step refuses a staged folder outside that home.
+  const user = loginName();
+  const r = await runElevated(scriptPath('apply-daemon-config.sh'), { Staged: staged, DaemonHome: home(), Service: SERVICE_NAME, ...(user ? { User: user } : {}) });
   log.info('daemon settings apply', { status: r.status, detail: r.detail });
   relinkDaemon();
   if (r.status === 'ok') return { ok: true };
