@@ -5,6 +5,9 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DaemonSettings } from '../../src/core/daemon/config';
 
+// rc9-e: daemon set refuses --kill-switch on from an SSH/RDP session; this parity test is about the settings written.
+for (const k of ['SSH_CONNECTION', 'SSH_CLIENT', 'SSH_TTY', 'SESSIONNAME']) delete process.env[k];
+
 const SAVED: DaemonSettings = {
   killSwitch: 'off', allowLan: false, dnsServers: ['1.1.1.1', '1.0.0.1'], dnsMode: 'netsh', basis: 'per_gb', escrow: '1000000',
   prepayBytes: '0', prepaySeconds: '0', rpcUrl: 'https://api.devnet.solana.com', rpcWsUrl: 'wss://api.devnet.solana.com',

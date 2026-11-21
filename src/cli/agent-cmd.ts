@@ -17,6 +17,7 @@ import { connect, adoptRunningSession, sessionStateUnknown } from '../main/servi
 import { readSettlements, runSettlement } from '../main/services/settlement';
 import { refreshSubscriptions, roster } from '../main/services/plans';
 import { daemonInfo, initDevice, deviceRecord } from '../main/daemon/manager';
+import { ksRemoteRiskFields } from './remote-session';
 import { readOtherWallet, switchNeeded, SWITCH_NEXT, switchAlsoNext, switchMessage } from './wallet-mismatch';
 import { launchdState, LAUNCHD_LABEL, LAUNCHD_PLIST } from '../main/daemon/launchd-state';
 import { launchdStartNext } from '../core/daemon/darwin-launchd';
@@ -755,6 +756,16 @@ async function readDeposits(): Promise<PendingSettlement[] | null> {
   }
 }
 
+/** rc9-e: the kill switch setting (undefined when unreadable: nothing is claimed). */
+function ksSetting(): string | undefined {
+  try {
+    return getDaemonSettings().settings.killSwitch;
+  } catch (err) {
+    log.warn(`agent status: kill switch setting not read: ${(err as Error).message}`);
+    return undefined;
+  }
+}
+
 /** WIN-W5: the kill switch setting is on or persist (unreadable = not known, so nothing is claimed). */
 function killSwitchOn(): boolean {
   try {
@@ -847,6 +858,8 @@ const status: Cmd = async (a, o) => {
     ...(deposits?.length && depositRows(deposits).length ? { deposits: depositRows(deposits) } : {}),
     ...(reconnecting && live ? { reconnecting: true, session: live.id, node: live.node, protocol: live.service, alsoNext: RECONNECT_BLOCKED_ALSO } : {}),
     ...(blocked ? { blocked: true } : {}), next,
+    // rc9-e H: on in an SSH / RDP session: a lost connection locks this computer out, a reboot included.
+    ...ksRemoteRiskFields(ksSetting()),
     ...(serviceDown && startNext ? { alsoNext: `then ${CLI} agent up --yes${dNext ? ` (or ${dNext})` : ''}` } : serviceDown && dNext ? { alsoNext: dNext } : {}),
     ...(!stopped && !reconnecting && !serviceDown && !dNext && statusAlso({ owner, live: connected, blocked, noWalletNext: missing?.next }) ? { alsoNext: statusAlso({ owner, live: connected, blocked, noWalletNext: missing?.next }) } : {}),
   };

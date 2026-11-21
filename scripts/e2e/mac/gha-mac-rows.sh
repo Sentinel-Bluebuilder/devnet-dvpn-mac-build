@@ -105,10 +105,11 @@ row_clock_skew() {
 pf_attach_lines() { sudo pfctl -sr 2>/dev/null | grep -E '^anchor "(dvpnd|sentinel-dvpn-)' ; }
 pf_anchor_rules() { sudo pfctl -a sentinel-dvpn-c0 -s rules 2>/dev/null; }
 row_pf_restore() {
-  local mp ks0 up1 up2 att_up att_after anc_after att_end anc_end net
+  local mp ks0 ksrc up1 up2 r1 att_up att_after anc_after att_end anc_end net
   [ "$(get up_rc)" = 0 ] || { RC=1; record pf_restore DIFFERS "skipped: the plain agent up failed, so a KS connect would too"; return; }
   ks0=$("$CLI" daemon settings --json 2>/dev/null | jq -r '[.. | objects | .killSwitch? // empty] | .[0] // "off"' 2>/dev/null)
-  run pf_ks_on daemon set --kill-switch on --yes
+  # rc9-e: turning the KS on from a remote session is refused without this flag; the runner is the machine itself
+  run pf_ks_on daemon set --kill-switch on --allow-remote-lockout --yes; ksrc=$RC
   mp=$(get max_price)
   gap
   if [ -n "$mp" ]; then run pf_up1 agent up --max-price "$mp" --yes; else run pf_up1 agent up --yes; fi; up1=$RC
@@ -118,7 +119,7 @@ row_pf_restore() {
     sleep 3
     # PF-DEAD-3 evidence: launchd's view of the killed service (state, runs, last exit, any throttled spawn) and when
     { date -u +%T; sudo launchctl print "system/$LD_LABEL" 2>&1 | grep -E "state =|runs =|last exit|spawn|throttle" ; } >"$EV/pf_launchd.out"
-    run pf_restore1 daemon restore-network
+    run pf_restore1 daemon restore-network; r1=$RC
     { date -u +%T; sudo launchctl print "system/$LD_LABEL" 2>&1 | grep -E "state =|runs =|last exit|spawn|throttle" ; } >>"$EV/pf_launchd.out"
     wait_service 60 >/dev/null
     att_after=$(pf_attach_lines); anc_after=$(pf_anchor_rules)
@@ -130,14 +131,35 @@ row_pf_restore() {
   fi
   run pf_restore2 daemon restore-network
   att_end=$(pf_attach_lines); anc_end=$(pf_anchor_rules)
-  run pf_ks_back daemon set --kill-switch "${ks0:-off}" --yes
-  { echo "ks0=$ks0 up1=$up1 up2=${up2:-} net_after_restore=${net:-}"; echo "attach while up: $att_up";
+  if [ "${ks0:-off}" = on ]; then run pf_ks_back daemon set --kill-switch on --allow-remote-lockout --yes; else run pf_ks_back daemon set --kill-switch off --yes; fi
+  { echo "ks0=$ks0 ks_on=$ksrc up1=$up1 restore1=${r1:-} up2=${up2:-} net_after_restore=${net:-}"; echo "attach while up: $att_up";
     echo "after kill+restore attach: [$att_after] anchor rules: [$anc_after]"; echo "end attach: [$att_end] anchor rules: [$anc_end]";
     echo '--- pfctl -sr (end) ---'; sudo pfctl -sr 2>&1; } >"$EV/pf_restore.out"
   RC=${up2:-$up1}
-  if [ "$up1" = 0 ] && [ -z "$att_after" ] && [ -z "$anc_after" ] && [ "$net" = yes ] && [ "${up2:-1}" = 0 ] && [ -z "$att_end" ] && [ -z "$anc_end" ]; then
-    record pf_restore PASS "KS connect, kill -9 dvpnd, restore-network: no attach line/anchor rules left, internet back; KS connect again ok; clean at the end"
-  else record pf_restore DIFFERS "up1=$up1 attach_after='$att_after' anchor_after='$(echo "$anc_after" | head -1)' net=${net:-} up2=${up2:-none} attach_end='$att_end' (see pf_restore.out)"; fi
+  # lead: PASS only on the FIRST Restore network (r1); a second one needed = DIFFERS, and the notes say so
+  if [ "$ksrc" = 0 ] && [ "$up1" = 0 ] && [ "${r1:-1}" = 0 ] && [ -z "$att_after" ] && [ -z "$anc_after" ] && [ "$net" = yes ] && [ "${up2:-1}" = 0 ] && [ -z "$att_end" ] && [ -z "$anc_end" ]; then
+    record pf_restore PASS "KS connect, kill -9 dvpnd, ONE restore-network: no attach line/anchor rules left, internet back; KS connect again ok; clean at the end"
+  else record pf_restore DIFFERS "ks_on=$ksrc up1=$up1 restore1=${r1:-none} attach_after='$att_after' anchor_after='$(echo "$anc_after" | head -1)' net=${net:-} up2=${up2:-none} attach_end='$att_end' (see pf_restore.out)"; fi
+}
+
+# ─── rc9-e H (lead): the kill switch from a remote session (SSH_CONNECTION set) is refused without --allow-remote-lockout ───
+# 'persist' after a lost session locks a remote box out for good (proven on Linux). Positive control: the same env plus
+# the flag turns it on; then it goes back to what it was. Nothing is paid.
+row_ks_remote_refused() {
+  local ks0 r0 code on1 r2 on2
+  ks0=$("$CLI" daemon settings --json 2>/dev/null | jq -r '[.. | objects | .killSwitch? // empty] | .[0] // "off"' 2>/dev/null)
+  [ "${ks0:-off}" = on ] && run ksr_pre daemon set --kill-switch off --yes
+  SSH_CONNECTION='203.0.113.7 50000 198.51.100.9 22' SSH_TTY=/dev/ttys009 run ksr_refused daemon set --kill-switch on --yes; r0=$RC
+  code=$(echo "$OUT" | jq -r '.code // .error.code // empty' 2>/dev/null)
+  on1=$("$CLI" daemon settings --json 2>/dev/null | jq -r '[.. | objects | .killSwitch? // empty] | .[0] // "off"' 2>/dev/null)
+  SSH_CONNECTION='203.0.113.7 50000 198.51.100.9 22' SSH_TTY=/dev/ttys009 run ksr_allowed daemon set --kill-switch on --allow-remote-lockout --yes; r2=$RC
+  on2=$("$CLI" daemon settings --json 2>/dev/null | jq -r '[.. | objects | .killSwitch? // empty] | .[0] // "off"' 2>/dev/null)
+  if [ "${ks0:-off}" = on ]; then run ksr_back daemon set --kill-switch on --allow-remote-lockout --yes; else run ksr_back daemon set --kill-switch off --yes; fi
+  { echo "ks0=$ks0 refused_rc=$r0 code=$code ks_after_refusal=$on1 allowed_rc=$r2 ks_after_allowed=$on2"; } >"$EV/ks_remote.out"
+  RC=0
+  if [ "$r0" != 0 ] && [ "$on1" != on ] && [ "$r2" = 0 ] && [ "$on2" = on ]; then
+    record ks_remote_refused PASS "SSH session: kill switch on refused (exit $r0, code ${code:-none}), still off; with --allow-remote-lockout it turns on (control); restored to $ks0"
+  else RC=1; record ks_remote_refused DIFFERS "refused_rc=$r0 code='${code}' ks_after=$on1 allowed_rc=$r2 ks_after_allowed=$on2 (see ks_remote.out)"; fi
 }
 
 # ─── E-ST owner (#38 rc.9): owner A's service, a fresh data dir + wallet B, the same device key ───
@@ -330,4 +352,4 @@ row_gui_smoke() {
   else record gui_smoke DIFFERS "open rc=$RC alive=$alive windows='$title' png=$png bytes (see gui_open.out)"; fi
 }
 
-ROWS="$ROWS doctor_rows c1_setup_links c2_apply_link launchd_print launchd_stopped clock_skew pf_restore wallet_switch gui_smoke install_by_hand"
+ROWS="$ROWS doctor_rows c1_setup_links c2_apply_link launchd_print launchd_stopped clock_skew ks_remote_refused pf_restore wallet_switch gui_smoke install_by_hand"

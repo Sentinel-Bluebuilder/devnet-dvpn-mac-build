@@ -28,8 +28,12 @@ import { snapshot } from '../main/app-state';
 import { driversStatus, repairDrivers, driverLines, DRIVER_LABELS, type DriverReport } from '../main/system/drivers';
 import { daemon, daemonInfo, deviceRecord, dvpndPath, runDoctor, initDevice, installService, uninstallService } from '../main/daemon/manager';
 import { readOtherWallet, switchNeeded, SWITCH_NEXT, switchAlsoNext } from './wallet-mismatch';
+import { ksRemoteCheck, KS_REMOTE_FLAG } from './remote-session';
 import { launchdState, LAUNCHD_LABEL, LAUNCHD_PLIST } from '../main/daemon/launchd-state';
 import { darwinDoctorRows } from '../core/daemon/darwin-launchd';
+
+/** rc9-d: a doctor detail in ASCII (arrows and dashes become their ASCII forms; anything else non-ASCII is dropped). */
+export const asciiDetail = (s: string): string => String(s ?? '').replace(/[\u2192\u279c]/g, '>').replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\u2026/g, '...').replace(/[^\x20-\x7e\n\t]/g, '');
 import { isAndroid } from '../shared/is-android';
 import { runHomeMigration } from '../main/daemon/migrate-run';
 import { log } from '../main/logger';
@@ -115,6 +119,8 @@ export const daemonCmd: Cmd = async (a, o) => {
     // rc9-d: a service set up for another wallet fails its preflight ("grant") however often it restarts: say why.
     const otherW = readOtherWallet(ownerAddress());
     if (otherW) rows.unshift({ name: 'service wallet', ok: false, level: 'fail', detail: `set up for another wallet (${otherW}), not the loaded one: it cannot start a session for this wallet. Run: ${SWITCH_NEXT} (${switchAlsoNext(otherW)})`, code: 'wallet-switch-needed', next: SWITCH_NEXT } as (typeof rows)[number]);
+    // rc9-d (AC-WIN over SSH): ASCII only, as the payer line: a non-ASCII arrow reached the agent as mojibake.
+    for (const r of rows) r.detail = asciiDetail(r.detail);
     o.print(rows.map((r) => `${checkMark(r.level).label}  ${r.name.padEnd(28)} ${r.detail}`).join('\n'), rows);
   } else if (sub === 'drivers') {
     const v = await driversStatus();
@@ -212,6 +218,10 @@ export const daemonCmd: Cmd = async (a, o) => {
     // Q0544: an empty settings copy is refused before anything is built from it (the flags were checked against
     // nothing: '--kill-switch on' said 'Basis must be per_gb or per_hour.').
     if (cur.empty) throw cliErr('daemon-settings-empty', `${CLI_NAME} daemon install --yes`, EMPTY_SETTINGS_COPY);
+    // rc9-e H: from an SSH / Remote Desktop session the kill switch is not turned on without --allow-remote-lockout
+    // (after a lost session it blocks every new connection to this computer at every boot). Before the prompt.
+    const ksRemote = ksRemoteCheck(str(a, 'kill-switch'), a.flags[KS_REMOTE_FLAG] === true);
+    if (ksRemote) throw ksRemote;
     const dns = str(a, 'dns');
     // Q0478 (FMC-M7 port): enforce the RPC https rule only when the user actually sets --rpc/--rpc-ws;
     // otherwise skip it so a KS/DNS-only set does not die re-validating a stored (http gate) RPC.

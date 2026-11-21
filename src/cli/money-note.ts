@@ -26,7 +26,7 @@ const NONE: readonly string[] = [
   'no-test-run', 'keystore-unavailable', 'keyfile-read-only', 'keyfile-unreadable', 'needs-admin', 'device-key-unreadable', 'setting-rejected', 'keyfile-lock-failed', // AUD-2 M12; WIN-W1
   'not-confirmed', 'no-wallet', 'keyfile-missing', 'keyfile-mode', 'wallet-switch-needed', 'clock-skew', 'no-device', 'device-permission',
   'plan-limit', 'busy', 'test-running', 'unsupported', 'daemon-missing', 'daemon-relogin', 'daemon-restarting',
-  'daemon-unavailable', 'network-mismatch', 'kill-switch-held', 'switch-reconnecting',
+  'daemon-unavailable', 'network-mismatch', 'kill-switch-held', 'switch-reconnecting', 'kill-switch-remote', // rc9-e: refused before any change
   // refused before paying (connection.ts reads the price and the open deposits first)
   'price-changed', 'deposit-unusable', 'deposits-unread',
   // agent-cmd's own checks and the shared service copy

@@ -5,7 +5,7 @@ export interface Args {
 }
 
 // On/off flags never take the next word as their value (`test plan --never-tested <server>` keeps the server).
-const BOOLEAN = new Set(['json', 'yes', 'online', 'no-probe', 'follow', 'help', 'all', 'fresh', 'compare', 'failed-last', 'never-tested', 'resume', 'switch', 'force', 'allow-empty', 'hidden', 'raise-limit']); // AUD-2 M4
+const BOOLEAN = new Set(['json', 'yes', 'allow-remote-lockout', 'online', 'no-probe', 'follow', 'help', 'all', 'fresh', 'compare', 'failed-last', 'never-tested', 'resume', 'switch', 'force', 'allow-empty', 'hidden', 'raise-limit']); // AUD-2 M4
 
 export function parseArgs(argv: string[]): Args {
   const out: Args = { _: [], flags: {} };

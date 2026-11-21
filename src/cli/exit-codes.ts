@@ -12,7 +12,7 @@ export const PAYING_COMMANDS: readonly string[] = ['agent', 'connect', 'switch',
 export const EXIT = { ok: 0, error: 1, needsYes: 2, usage: 3, needsHuman: 4, safety: 5, network: 6 } as const;
 
 const NEEDS_HUMAN: readonly string[] = ['insufficient-funds', 'allowance-above-balance', 'not-funded', 'spending-limit', 'price-cap', 'no-wallet', 'keyfile-missing', 'keyfile-mode', 'clock-skew', 'keyfile-unreadable', 'needs-admin'];
-const SAFETY: readonly string[] = ['bad-recipient', 'low-sol-after', 'kill-switch', 'kill-switch-held', 'kill-switch-failed'];
+const SAFETY: readonly string[] = ['bad-recipient', 'low-sol-after', 'kill-switch', 'kill-switch-held', 'kill-switch-failed', 'kill-switch-remote'];
 const NETWORK: readonly string[] = ['rpc-busy', 'rpc-timeout', 'rpc-quota', 'rpc-network', 'rpc-ws', 'rpc-unavailable', 'timeout', 'waiting-for-network'];
 
 /** The exit code for a failure's `code` (1 when the code is missing or in no class). */

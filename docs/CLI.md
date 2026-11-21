@@ -75,7 +75,7 @@ Generated from `src/cli/catalogue.ts` — edit that file, then `npm run docs:cli
 | `daemon uninstall --yes` | Remove the VPN service from this computer: networking restored, device key kept (one admin prompt). Then remove the app itself. | yes |
 | `daemon migrate [--legacy-dvpnd PATH] --yes` | Move the service home of an older version to the new layout, same device key and settings (run as administrator; the installer does this). | yes |
 | `daemon settings` | Kill switch, DNS, LAN, RPC (key hidden). |  |
-| `daemon set [--kill-switch off\|on\|persist] [--dns handshake\|cloudflare\|ip,ip] [--dns-mode netsh\|networksetup\|resolvectl\|resolvconf\|vpn\|none] [--allow-lan true\|false] [--whole-device true\|false] [--split-mode off\|include\|exclude] [--split-apps "<app path>;..."\|none] [--split-routes IP-or-CIDR,...\|none] [--basis per_gb\|per_hour] [--escrow tDVPN] [--prepay-mb N] [--prepay-minutes N] [--rpc URL] [--rpc-ws URL] --yes` | Change service settings (admin prompt, restarts it). | yes |
+| `daemon set [--kill-switch off\|on\|persist] [--allow-remote-lockout] [--dns handshake\|cloudflare\|ip,ip] [--dns-mode netsh\|networksetup\|resolvectl\|resolvconf\|vpn\|none] [--allow-lan true\|false] [--whole-device true\|false] [--split-mode off\|include\|exclude] [--split-apps "<app path>;..."\|none] [--split-routes IP-or-CIDR,...\|none] [--basis per_gb\|per_hour] [--escrow tDVPN] [--prepay-mb N] [--prepay-minutes N] [--rpc URL] [--rpc-ws URL] --yes` | Change service settings (admin prompt, restarts it). | yes |
 | `daemon restore-network` | End any session, release kill switch and proxy. |  |
 
 ### Servers

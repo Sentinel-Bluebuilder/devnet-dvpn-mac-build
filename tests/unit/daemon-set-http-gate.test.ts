@@ -3,6 +3,9 @@
 // kill switch never persisted. The https rule now holds only for an RPC being set.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// rc9-e: daemon set refuses --kill-switch on from an SSH/RDP session; these tests are about something else.
+for (const k of ['SSH_CONNECTION', 'SSH_CLIENT', 'SSH_TTY', 'SESSIONNAME']) delete process.env[k];
+
 const GATE = 'http://127.0.0.1:18899/c/pcjwPAbiA1CUVb48vVb98iXy';
 const applied: unknown[] = [];
 vi.mock('../../src/main/daemon/settings', () => ({

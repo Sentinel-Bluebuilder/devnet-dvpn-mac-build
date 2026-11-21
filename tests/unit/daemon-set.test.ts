@@ -1,6 +1,9 @@
 // ─── `daemon set`: bad values never reach the apply step; Android copy has no admin prompt ───
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// rc9-e: daemon set refuses --kill-switch on from an SSH/RDP session; these tests are about something else.
+for (const k of ['SSH_CONNECTION', 'SSH_CLIENT', 'SSH_TTY', 'SESSIONNAME']) delete process.env[k];
+
 const applied: unknown[] = [];
 vi.mock('../../src/main/daemon/settings', () => ({
   getDaemonSettings: () => ({
