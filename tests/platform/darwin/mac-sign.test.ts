@@ -37,8 +37,8 @@ describe('Mac signing identity', () => {
 describe('Mac signing keychain search list', () => {
   const { parseSearchList } = require('../../../build/mac/adhoc-sign.cjs') as { parseSearchList: (o: string) => string[] };
   it('reads `security list-keychains -d user` output', () => {
-    expect(parseSearchList('    "/Users/ddv/Library/Keychains/login.keychain-db"\n    "/Users/ddv/ddv-signing/ddv-signing.keychain-db"\n'))
-      .toEqual(['/Users/ddv/Library/Keychains/login.keychain-db', '/Users/ddv/ddv-signing/ddv-signing.keychain-db']);
+    expect(parseSearchList('    "/Users/user/Library/Keychains/login.keychain-db"\n    "/Users/user/ddv-signing/ddv-signing.keychain-db"\n'))
+      .toEqual(['/Users/user/Library/Keychains/login.keychain-db', '/Users/user/ddv-signing/ddv-signing.keychain-db']);
     expect(parseSearchList('')).toEqual([]);
   });
   it('the hook puts the old list back after signing (finally)', () => {

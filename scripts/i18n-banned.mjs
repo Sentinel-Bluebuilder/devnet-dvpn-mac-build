@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const LIST_PATH = process.env.I18N_BANNED_LIST ?? path.join(os.homedir(), 'memory', 'devnet-dvpn-i18n', 'banned-names.txt');
+export const LIST_PATH = process.env.I18N_BANNED_LIST ?? '';
 const SKIP_DIRS = new Set(['node_modules', '.git', 'out', 'dist', 'dist-vm', 'dist-vm-ui', 'build', 'evidence', 'coverage']);
 const TEXT = /\.(ts|tsx|mjs|cjs|js|json|md|yml|yaml|html|css|txt|sh|ps1|nsh)$/;
 

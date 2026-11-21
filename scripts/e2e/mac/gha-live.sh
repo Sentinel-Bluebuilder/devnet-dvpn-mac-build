@@ -21,8 +21,13 @@ SEND_TO=${SEND_TO:-9enW4xCJrmytnEC6VsJYPbcT2ng3QTUwUkAHSrKR9Xrj}   # #28 devnet 
 SYSTEM_PROGRAM=11111111111111111111111111111111
 EV=${EVIDENCE_DIR:-evidence}
 mkdir -p "$EV" "$DVPN_DATA_DIR"
-: >"$EV/rows.jsonl"
-STATE="$EV/.state"; : >"$STATE"   # key=value shared between rows (home ip, max price, …)
+STATE="$EV/.state"   # key=value shared between rows (home ip, max price, …)
+# CLEANUP_ONLY=1 (the workflow's if: always() step, also after a cancel) keeps the rows + state of the run it cleans.
+if [ "${CLEANUP_ONLY:-0}" != 1 ]; then : >"$EV/rows.jsonl"; : >"$STATE"; else touch "$EV/rows.jsonl" "$STATE"; fi
+# Keys of throwaway wallets the rows funded (wallet_switch B) wait here until their balance is back with the owner
+# (lead rc.9: a cancelled run strands 0). Deleted only once empty; a key that could not be emptied stays for ctl.
+LEFTOVER=${LEFTOVER_DIR:-${RUNNER_TEMP:-$HOME}/ddv-leftover}
+(umask 077; mkdir -p "$LEFTOVER")
 HOME_IP=''
 
 # ─── Helpers ───
@@ -272,7 +277,46 @@ cleanup_sweep() {
   esac
 }
 
+# sweep_leftovers: every throwaway wallet key in $LEFTOVER sends all its tDVPN, then all its SOL (--allow-empty, less
+# the fee) to the owner; the key is deleted only when its balance reads <= LEFTOVER_DUST lamports. Runs 44843609674 and
+# 44846196847 stranded 0.039995 + 0.0717962 SOL: the row's SOL return lacked --allow-empty and the key was deleted anyway.
+LEFTOVER_DUST=${LEFTOVER_DUST:-10000}
+sweep_leftovers() {
+  local k addr owner d tdv lam amt left n=0 kept=0
+  owner=$(get owner); [ -n "$owner" ] || owner=$("$CLI" wallet show --json 2>/dev/null | jq -r '.owner // .address // empty' 2>/dev/null)
+  for k in "$LEFTOVER"/*.json; do
+    [ -f "$k" ] || continue
+    n=$((n + 1)); addr=$(basename "$k" .json); addr=${addr#b-}
+    [ -n "$owner" ] || { kept=$((kept + 1)); echo "leftover $addr: owner unknown, key kept" >>"$EV/leftover.out"; continue; }
+    d=$(mktemp -d "${RUNNER_TEMP:-/tmp}/lo.XXXXXX")
+    tdv=$(DVPN_KEYFILE="$k" DVPN_DATA_DIR="$d" "$CLI" agent status --json 2>/dev/null | jq -r '.tdvpn // "0"')
+    if [ -n "$tdv" ] && [ "$tdv" != 0 ]; then
+      DVPN_KEYFILE="$k" DVPN_DATA_DIR="$d" "$CLI" wallet send --to "$owner" --tdvpn "$tdv" --yes --json >>"$EV/leftover.out" 2>&1 || echo "leftover $addr: tDVPN send exit $?" >>"$EV/leftover.out"
+      sleep "$TX_GAP"
+    fi
+    lam=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"$addr\",{\"commitment\":\"confirmed\"}]}" | jq -r '.result.value // empty')
+    if [ -n "$lam" ] && [ "$lam" -gt "$LEFTOVER_DUST" ]; then
+      amt=$(awk -v l="$lam" -v f="$LEFTOVER_DUST" 'BEGIN { printf "%.9f", (l - f) / 1e9 }')
+      DVPN_KEYFILE="$k" DVPN_DATA_DIR="$d" "$CLI" wallet send --to "$owner" --sol "$amt" --allow-empty --yes --json >>"$EV/leftover.out" 2>&1 || echo "leftover $addr: SOL send exit $?" >>"$EV/leftover.out"
+      sleep "$TX_GAP"
+    fi
+    left=$(sol_rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"$addr\",{\"commitment\":\"confirmed\"}]}" | jq -r '.result.value // empty')
+    rm -rf -- "$d"
+    if [ -n "$left" ] && [ "$left" -le "$LEFTOVER_DUST" ]; then
+      rm -P "$k" 2>/dev/null || rm -f "$k"
+      echo "leftover $addr: emptied to $owner ($left lamports left), key deleted" >>"$EV/leftover.out"
+    else
+      kept=$((kept + 1)); echo "leftover $addr: ${left:-unknown} lamports left, key KEPT at $k" >>"$EV/leftover.out"
+    fi
+  done
+  [ "$n" = 0 ] && return 0
+  RC=$kept
+  if [ "$kept" = 0 ]; then record leftover_sweep PASS "$n throwaway wallet(s) emptied to $owner, keys deleted (see leftover.out)"
+  else record leftover_sweep DIFFERS "$kept of $n throwaway wallet(s) not emptied; keys kept in $LEFTOVER (see leftover.out)"; fi
+}
+
 cleanup() {
+  [ "$(get cleaned)" = 1 ] && { sweep_leftovers; write_result; return; }
   chmod 600 "$DVPN_KEYFILE" 2>/dev/null || echo "cleanup: chmod 600 on the key failed" >&2
   "$CLI" agent down --yes --json >"$EV/cleanup_down.out" 2>&1 || echo "cleanup: agent down exit $?" >&2
   "$CLI" daemon restore-network --json >"$EV/cleanup_restore.out" 2>&1 || echo "cleanup: restore-network exit $?" >&2
@@ -285,6 +329,8 @@ cleanup() {
     sleep "$TX_GAP"
     cleanup_sweep
   fi
+  sweep_leftovers
+  put cleaned 1
   write_result
 }
 
@@ -307,6 +353,11 @@ write_result() {
   echo "RESULT: $pass PASS, $differs DIFFERS → $EV/RESULT.md"
 }
 trap cleanup EXIT
+# A cancel sends SIGINT then SIGTERM: leave through the EXIT trap (best effort; the workflow's if: always() step runs
+# CLEANUP_ONLY=1 afterwards for whatever is still left).
+trap 'exit 130' INT
+trap 'exit 143' TERM
+if [ "${CLEANUP_ONLY:-0}" = 1 ]; then exit 0; fi   # the EXIT trap does the work
 
 # ─── Order ───
 ROWS="version home_ip init setup setup_allowance install doctor up exit_ip status down usage_exit3 send_above_balance send_system_program send_sol_no_fees device_plan_above_wallet keyfile_mode"

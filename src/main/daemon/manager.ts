@@ -923,6 +923,18 @@ export function deviceHomeGone(): string | null {
 }
 
 /** `staging` = the home to install: the staging home, or the wallet-switch scratch folder (rc.4 E-55, #31 b15c05f). */
+/** The wallet the installed service runs for (config.toml's top-level owner), or null (none / unreadable). rc9-d
+ *  (#31 3dcd9a086 wallet-mismatch.ts): macOS's setup user reads it through the read ACE setup-daemon.sh gives. */
+export function serviceOwner(home = DEFAULT_DAEMON_HOME): string | null {
+  try {
+    const owner = readToml(fs.readFileSync(path.join(home, CONFIG_FILE), 'utf8'), '', 'owner');
+    return typeof owner === 'string' && owner ? owner : null;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') log.warn('service owner unreadable', { err: (err as Error).message });
+    return null;
+  }
+}
+
 export async function installService(staging = stagingHome()): Promise<{ ok: boolean; error?: string; code?: string; waitingForNetwork?: boolean; data?: { relogin: boolean } }> {
   const rec = deviceRecord();
   if (!rec) return { ok: false, error: 'Initialise the device first.' };
@@ -981,8 +993,8 @@ export function classifyServiceStart(code: number, stderr: string): ServiceStart
 
 /**
  * Start the installed service if it is not running, without a password prompt. dvpnd refuses to
- * start until the device has a grant; launchd (KeepAlive, ThrottleInterval 60 s) starts it again
- * within a minute of device setup on its own. A non-admin cannot kickstart a system daemon, so
+ * start until the device has a grant; launchd (KeepAlive, ThrottleInterval 20 s) starts it again
+ * within 20 s of device setup on its own. A non-admin cannot kickstart a system daemon, so
  * this only tries it and otherwise reports 'no-right' (the caller says "starts within a minute").
  */
 export function startServiceIfStopped(): Promise<ServiceStart> {

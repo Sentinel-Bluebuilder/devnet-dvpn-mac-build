@@ -27,6 +27,7 @@ import { restoreNetwork, adoptRunningSession } from '../main/services/connection
 import { snapshot } from '../main/app-state';
 import { driversStatus, repairDrivers, driverLines, DRIVER_LABELS, type DriverReport } from '../main/system/drivers';
 import { daemon, daemonInfo, deviceRecord, dvpndPath, runDoctor, initDevice, installService, uninstallService } from '../main/daemon/manager';
+import { readOtherWallet, switchNeeded, SWITCH_NEXT, switchAlsoNext } from './wallet-mismatch';
 import { launchdState, LAUNCHD_LABEL, LAUNCHD_PLIST } from '../main/daemon/launchd-state';
 import { darwinDoctorRows } from '../core/daemon/darwin-launchd';
 import { isAndroid } from '../shared/is-android';
@@ -111,6 +112,9 @@ export const daemonCmd: Cmd = async (a, o) => {
     rows.push(await clockDoctorRow());
     // Other VPN adapters are a desktop check; Android has none to compete with.
     if (!isAndroid()) rows.push(rival);
+    // rc9-d: a service set up for another wallet fails its preflight ("grant") however often it restarts: say why.
+    const otherW = readOtherWallet(ownerAddress());
+    if (otherW) rows.unshift({ name: 'service wallet', ok: false, level: 'fail', detail: `set up for another wallet (${otherW}), not the loaded one: it cannot start a session for this wallet. Run: ${SWITCH_NEXT} (${switchAlsoNext(otherW)})`, code: 'wallet-switch-needed', next: SWITCH_NEXT } as (typeof rows)[number]);
     o.print(rows.map((r) => `${checkMark(r.level).label}  ${r.name.padEnd(28)} ${r.detail}`).join('\n'), rows);
   } else if (sub === 'drivers') {
     const v = await driversStatus();
@@ -150,6 +154,9 @@ export const daemonCmd: Cmd = async (a, o) => {
     // U1-O (#38 rc.9): a standard user learns it first, not after the wallet and device checks (AC-WIN rc.8).
     if (isAdminAccount() === false) throw cliErr('needs-admin', NEEDS_ADMIN_NEXT, 'Installing the VPN service needs an administrator, and this Windows account is a standard user. Run the command below: Windows asks for an administrator\'s name and password. Nothing was paid.');
     if (!ownerAddress()) throw cliErr('no-wallet', `${CLI_NAME} wallet create --keyfile <path> --yes, then fund the address it prints`, 'Create or import a wallet, then run "device setup --yes": the service will not start without a funded, permitted device.');
+    // rc9-d: installing again cannot make the service pay for another wallet (its preflight fails on "grant").
+    const otherW = readOtherWallet(ownerAddress());
+    if (otherW) throw switchNeeded(otherW, ownerAddress()!);
     // Offline repair (port of #33 0790fc2): when the balances cannot be read but this wallet already
     // set up a device here, the service is reinstalled anyway (it needs no network to start).
     let w: Awaited<ReturnType<typeof walletRead>> | null = null;

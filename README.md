@@ -17,7 +17,7 @@ and installs the VPN service (one administrator prompt); after that `devnet-dvpn
 in any terminal. To remove it: Diagnostics → Remove the VPN service (or
 `devnet-dvpn daemon uninstall --yes`), then drag the app to the Trash. Scripts and AI agents
 install from a terminal with no clicks (`hdiutil` + `ditto`, then `daemon init` → `device setup`
-→ `daemon install`): [`docs/INSTALLER.md`](docs/INSTALLER.md) "Install from a terminal".
+→ `daemon install`): `docs/INSTALLER.md` "Install from a terminal".
 
 ## Develop
 
@@ -25,29 +25,28 @@ install from a terminal with no clicks (`hdiutil` + `ditto`, then `daemon init` 
 npm ci
 npm run typecheck
 npm test                              # authoritative run is in the macOS guest
-bash scripts/e2e/mac/sync.sh          # copy the tree to the macOS test guest (ssh ddv-mac)
 npm run release:mac                   # on a Mac: .dmg + .zip (x64 + arm64) + SHA256SUMS
 ```
 
-Live tests run in a disposable macOS guest on GCP, never on a laptop:
-`scripts/e2e/mac/cli-sweep.sh` (local / daemon / spend / ksdns / cover), `ui-smoke.sh`,
-`installer-test.sh`.
+Live tests run on a disposable macOS runner, never on a developer's own Mac: the end-to-end harness is kept
+outside the public source, except `scripts/e2e/mac/gha-live.sh` + `gha-mac-rows.sh`, which the
+`macos-rc8` workflow runs on a GitHub macOS runner.
 
 ## Docs
 
 | doc | what it is |
 |---|---|
-| [`docs/MAC-PARITY.md`](docs/MAC-PARITY.md) | every command, feature, screen, protocol: Windows / Linux / Mac evidence |
-| [`docs/MAC-PORT.md`](docs/MAC-PORT.md) | each Linux piece and what replaced it on macOS |
-| [`docs/INSTALLER.md`](docs/INSTALLER.md) | .dmg / .zip, first-run setup, update, uninstall, proof |
+| `docs/MAC-PARITY.md` | every command, feature, screen, protocol: Windows / Linux / Mac evidence |
+| `docs/MAC-PORT.md` | each Linux piece and what replaced it on macOS |
+| `docs/INSTALLER.md` | .dmg / .zip, first-run setup, update, uninstall, proof |
 | [`docs/CLI.md`](docs/CLI.md) | every command (generated from `src/cli/catalogue.ts`) |
-| [`docs/LINUX-PORT.md`](docs/LINUX-PORT.md) | the Windows → Linux map this build started from |
+| `docs/LINUX-PORT.md` | the Windows → Linux map this build started from |
 | [`ARCHITECTURE`](docs/ARCHITECTURE.md), [`DESIGN`](docs/DESIGN.md), [`MANIFESTO`](docs/MANIFESTO.md) | shared with #31 (platform paths map per `MAC-PORT.md`) |
 
 ## Repo map (publish structure)
 
 - **Build / test:** `npm ci`, `npm run typecheck`, `npm test` (see sections above for platform specifics).
-- **Tests:** unit tests under `tests/` / `src/**/*.test.ts`; end-to-end harness under `scripts/e2e/`.
+- **Tests:** unit tests under `tests/` / `src/**/*.test.ts`; end-to-end harness kept outside the public source.
 - **Evidence:** run proofs are the GitHub Actions run summaries and their evidence artifacts.
 - **Never committed:** wallets, keys, `.env`, `dvpnd`/`upstream` source (see `.gitignore`).
 

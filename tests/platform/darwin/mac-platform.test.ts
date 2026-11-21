@@ -325,8 +325,8 @@ describe('dvpnd doctor rows', () => {
 
 describe('LaunchDaemon', () => {
   const s = fs.readFileSync('resources/scripts/setup-daemon.sh', 'utf8');
-  it('keeps retries a minute apart while the device has no grant (RPC budget)', () => {
-    expect(s).toContain('<key>ThrottleInterval</key><integer>60</integer>');
+  it('keeps retries 20 s apart: an RPC budget while the device has no grant, and back inside the 30 s restore wait (PF-DEAD-3)', () => {
+    expect(s).toContain('<key>ThrottleInterval</key><integer>20</integer>');
     expect(s).toContain('<key>KeepAlive</key><true/>');
     expect(s).toContain('plutil -lint');
   });

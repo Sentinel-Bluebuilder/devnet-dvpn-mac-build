@@ -214,6 +214,22 @@ jobs:
           chmod 600 "$key"
           EXPECT_VERSION=$(jq -r .version package.json) DVPN_KEYFILE="$key" bash scripts/e2e/mac/gha-live.sh
 
+      # Lead rc.9: a cancelled run strands 0. GitHub runs if: always() steps after a cancel too, so this pass revokes and
+      # sweeps the device key if the script's own EXIT trap never ran, and empties every throwaway wallet key the rows
+      # left in $RUNNER_TEMP/ddv-leftover (wallet_switch B) to the owner before the runner is thrown away.
+      - name: Leftover sweep (always, also after a cancel)
+        if: always()
+        env:
+          EXTRA_ROWS_FILE: scripts/e2e/mac/gha-mac-rows.sh
+        run: |
+          key="$RUNNER_TEMP/dvpn-test-key.json"
+          test -f "$key" || { echo 'no test key on this runner: nothing was funded'; exit 0; }
+          command -v devnet-dvpn >/dev/null || { echo 'the app was never installed: nothing was funded'; exit 0; }
+          CLEANUP_ONLY=1 EXPECT_VERSION=$(jq -r .version package.json) DVPN_KEYFILE="$key" bash scripts/e2e/mac/gha-live.sh
+          left=$(ls "$RUNNER_TEMP/ddv-leftover" 2>/dev/null | wc -l | tr -d ' ')
+          echo "### Leftover keys after the sweep: $left" >> "$GITHUB_STEP_SUMMARY"
+          test "$left" = 0 || { echo "::error::$left throwaway wallet key(s) could not be emptied (see evidence/leftover.out)"; exit 1; }
+
       - name: Result
         if: always()
         run: test -f evidence/RESULT.md && cat evidence/RESULT.md >> "$GITHUB_STEP_SUMMARY" || echo 'no RESULT.md' >> "$GITHUB_STEP_SUMMARY"

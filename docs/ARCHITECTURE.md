@@ -2,7 +2,7 @@
 
 macOS build of #31 Devnet dVPN. The shared layers (`core/`, services, renderer, CLI catalogue)
 are the same code as Windows and Linux; every platform piece and its macOS replacement is listed
-in [`MAC-PORT.md`](MAC-PORT.md). Feature IDs (F*.*) refer to [`FEATURE-PLAN.md`](FEATURE-PLAN.md).
+in `MAC-PORT.md`. Feature IDs (F*.*) refer to `FEATURE-PLAN.md`.
 
 ## Processes and trust
 
@@ -89,7 +89,7 @@ resources/scripts/   dvpn-helper + its whitelisted root steps (setup-daemon.sh, 
                      remove-tunnels.sh, install-deps.sh, uninstall-cleanup.sh, service-ctl.sh)
 ```
 
-Port sources for each module: [`REUSE-MAP.md`](REUSE-MAP.md).
+Port sources for each module: `REUSE-MAP.md`.
 
 ## IPC tiers (M5.2 #1)
 

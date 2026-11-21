@@ -10,31 +10,7 @@ control reaches an IPC channel that has no CLI mapping, or when a channel has no
 
 <!-- TRACE:START (hand-written, kept on regenerate) -->
 
-Each row was followed by reading the code, entry to the OS / chain / dvpnd, on 2026-10-22.
-"Proof" names the run that exercised it for real.
-
-| Control (page) | Path traced | Gating / failure | Proof |
-|---|---|---|---|
-| **Apply** (Split tunnelling, Kill switch, Settings → VPN service) | `useDaemonSettings.apply` → `call(DAEMON_SETTINGS_APPLY, {...settings, ...draft})` → ipc.ts `[DAEMON_SETTINGS_APPLY]` (keeps a redacted RPC URL) → `applyDaemonSettings` (src/main/daemon/settings.ts): `validateSettings` → `renderConfigs` → staged `config.toml` + `client.config.toml` (+ per-service `*.config.toml` when `wholeDevice` is set) → `runElevated(apply-daemon-config.ps1)` → copies, restarts `dvpnd`, rolls back if it will not start | Split page runs `validateSplit` before the button enables (same rules as dvpnd). `{ok:false}` → `call` throws → error toast, draft kept, bar stays. One UAC prompt; none on the VM (elevated S4U task) | VM ddv-win-2 2026-10-22 `vm-split-ui.ps1`: `split-apply` PASS ×2, CLI `split status` read back the page's choice. CLI twin `daemon set --split-* --yes`: engine's `vm-split-test.ps1` |
-| **Mode radios + app checkboxes** (Split) | local draft only (`setSplit`) until Apply; app list = `APPS_LIST` → `listApps` (src/main/system/apps.ts) → `powershell -File list-apps.ps1` (Start Menu .lnk via WScript.Shell + windowed processes) → `mergeApps` → icons `app.getFileIcon` | Script missing / not Windows → `{supported:false}` + message, Browse still works. Store apps and system tools filtered | VM: `split apps` listed 15 apps incl. Edge at its exact path; `split-app=Microsoft Edge:on` ticked `C:Program Files (x86)MicrosoftEdgeApplicationmsedge.exe` |
-| **Browse for an app…** (Split) | `APPS_PICK` → `dialog.showOpenDialog` (.exe filter) → exact path | cancel → rejected promise, logged, nothing changes. No CLI twin (the CLI takes the path) | ui-smoke click only (dialog cannot be driven headless) |
-| **Restore network** (Kill switch ×2, Home banner, Diagnostics) | `RESTORE_NETWORK` → `restoreNetwork` (services/connection.ts:538) → dvpnd `listSessions` → `stopSession` for each live one (dvpnd removes WFP filters + reverts DNS) → DNS leftover check | DNS revert failed and really left over → `dns-revert-failed` with a plain fix | engine VM `vm-ks-edge.ps1` / `vm-matrix.ps1` (CLI `daemon restore-network`) |
-| **Always** radio (Kill switch) | opens ConfirmModal first (`askAlways`) → `setDraft({killSwitch:'persist'})` → Apply row above | only when switching TO Always | ui-smoke both themes: `expect=Turn on Always` PASS |
-| **Connect** (Connect sheet) | `CONNECT` → `connect` (services/connection.ts) → chain deposit (TS builder, simulate first) → dvpnd `ClientService.StartSession` over gRPC | refused before paying when `killSwitchBlocksProtocol` / funds / node checks fail | `vm-ui-proof.ps1` all six protocols (2026-10-21) + `vm-split-ui.ps1` |
-| **DNS picker check** (Settings, no button: runs 0.6 s after the choice changes) | `DnsCheck` → `DNS_PROBE` (readonly) → `probeDns` (src/main/system/dns-probe.ts): one UDP `example.com` A query per IP, 2.5 s each → `dnsProbeProblem` | non-IP entries skipped; max 8 servers; nothing is changed; warns, never blocks Apply | laptop UI scenario `count=[data-dns-check="ok"]`; CLI twin `daemon dns-check` in cli-e2e (exit 0 / 1 / 3) |
-| **Restore default settings** (Settings) | ConfirmModal → `SETTINGS_RESET` → `resetSettings` (src/main/system/settings.ts): `RESET_KEYS` = every key but `favourites`, `rpcUrls` → `updateSettings` (sanitize + write + listeners) | confirm first; VPN service settings untouched (they have their own Reset) | unit `settings-reset.test.ts`; app click wrote the defaults (test data dir); cli-e2e `settings reset` needs `--yes` (exit 2), then resets |
-| **Stop** (Node test, while a run is going) | `NODE_TEST_STOP` → `stopNodeTest` (services/node-test.ts): sets the flag + a `stop` marker file (so `test stop` in another terminal reaches a CLI run) → `halt()` between the steps of the current server throws → CANCELLED "Stopped during this server.", `finally` disconnects; later servers CANCELLED "Stopped before this server."; test deposits still settled | a run with nothing going → no-op (button hidden) | 95c09b9; CLI `test stop` = same function |
-| **Connect** reusing a deposit (Connect sheet, per GB / per hour) | `connect` → `reusableChannel` (open on chain, enough left) → `claimForReuse` (services/settlement.ts): cancels the close Disconnect queued 15 s earlier; if that close already fired, the deposit is NOT reused and a new one is paid | without it a reconnect within ~20 s was ended by the node "position closing" (ui-win-3 route run 15:46 UTC) | unit settle-reuse.test.ts (fails with the cancel removed); ui-win-3 route2 |
-| `cost:preview` (no button) | channel exists for the CLI `cost`; the Connect sheet imports the SAME `costPreview` (src/core/pricing/cost.ts via shared/format) | not a bug: one function, two callers | cli-e2e.sh `cost` rows |
-
-**Fixed during the audit:** scanner missed modal `onConfirm` (Settle now, Top up, Send, Subscribe…) and expression-bodied helpers (Diagnostics "Repair drivers"); `cli-e2e.sh` still ran `wallet create` without `--yes` (the CLI now asks first); the Split page's "Normal connection" lane showed the VPN IP (the app's own IP check rides the VPN, so the lane now shows the IP measured before connecting) and, in "only chosen apps", Home/Split showed the user's own IP as "Sites see" (now the server address).
-
-**Spend-tier rows proven on VM ui-win-1 (ddv17.5, 2026-10-22 08:14 UTC, VM wallet 8fvfYL4G…):**
-`channels fund 8jn3upHz… --tdvpn 0.01 --yes` → "Topped up", deposit 0.001 → 0.011 (`channels`
-read back); `test run FFmjhX… --max-spend 0.05 --yes` → FAST 124.03 Mbps, exit IP = node
-35.232.17.117, DNS at the VPN exit, test deposits closed; `test show` = same run;
-`quality speed` → 101.78 Mbps. Page twins: Activity "Top up", Node test "Run test",
-Diagnostics "Speed test" call the same channels (table above).
+_(no hand traces yet)_
 
 <!-- TRACE:END -->
 

@@ -31,7 +31,7 @@ section moves there under its version.
   With passwordless `sudo` (`sudo -n`) nothing asks. Otherwise macOS shows its password dialog,
   which needs a person at the screen: an agent over SSH cannot answer it.
 - Tested: `agent-cmd`, `cli-map` and `ui-controls` unit tests 41/41 on darwin, typecheck clean
-  (ctl-1, 2026-11-15). Not yet run live on a Mac.
+  (Linux CI box, 2026-11-15). Not yet run live on a Mac.
 
 ### Documentation fixed (2026-11-15, docs only)
 

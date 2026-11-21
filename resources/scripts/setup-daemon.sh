@@ -30,6 +30,14 @@ LABEL="${ARG_Label:-$LABEL}"; PLIST="/Library/LaunchDaemons/$LABEL.plist"
 under "$HOME_DIR" "$DAEMON_ROOT" || die "daemon home must be under $DAEMON_ROOT"
 [[ "$GROUP" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "bad group name $GROUP"
 if [ -n "$USER_NAME" ]; then id -u "$USER_NAME" >/dev/null 2>&1 || die "no such user $USER_NAME"; fi
+# rc9-d (run 44843609674 sw_install_a; AC-LINUX loop): `daemon install --yes` with the service installed and nothing
+# staged died "staging folder not found", and doctor's next led back to it. An installed home with NO staging folder is
+# a re-install of that home (owner set, binaries + LaunchDaemon refreshed), as with no --Staging. Only a path that does
+# not exist at all (not a link, not a file) counts as "nothing staged"; every other case still meets the checks below.
+if [ -n "$STAGING" ] && [ ! -e "$STAGING" ] && [ ! -L "$STAGING" ] && [ -f "$HOME_DIR/config.toml" ]; then
+  echo "nothing staged at $STAGING: re-installing the service from its home $HOME_DIR" >&2
+  STAGING=''
+fi
 # Staging is deleted as root at the end: only ever the app's own daemon-staging folder (first setup) or
 # daemon-switch folder (wallet switch, #31 rc.4 E-55 switchHome), no link.
 if [ -n "$STAGING" ]; then
@@ -163,7 +171,9 @@ done
 #    user-writable Homebrew dir (cb33 launchd-PATH finding 1). `run --instance c0` with no --home, so
 #    the daemon reads the real instance dir and gives its socket the group. SIGTERM stop = the daemon
 #    ends the session and releases the kill switch. A device without its grant fails preflight on
-#    every start: ThrottleInterval keeps the retries (each costs RPC calls) one minute apart.
+#    every start: ThrottleInterval keeps the retries (each costs RPC calls) 20 s apart (3 a minute). rc9-d PF-DEAD-3
+#    (run 44846196847 pf_restore): at 60 s a dvpnd killed < 60 s after its last start (the kill-switch apply restarts it)
+#    came back AFTER the app's 30 s restore wait (SERVICE_WAIT_MS), so Restore network gave up and the block stayed.
 SVC_PATH="$LIB/tools"
 for d in v2ray xray hysteria2; do [ -d "$LIB/$d" ] && SVC_PATH="$SVC_PATH:$LIB/$d"; done
 SVC_PATH="$SVC_PATH:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -183,7 +193,7 @@ cat > "$PLIST.new" <<PL
   <dict><key>PATH</key><string>$SVC_PATH</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>60</integer>
+  <key>ThrottleInterval</key><integer>20</integer>
   <key>ExitTimeOut</key><integer>30</integer>
   <key>ProcessType</key><string>Interactive</string>
   <!-- 077: what the daemon creates itself (its database) is root only; it sets the socket mode itself -->

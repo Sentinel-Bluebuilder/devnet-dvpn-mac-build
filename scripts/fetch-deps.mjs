@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const LOCK = JSON.parse(fs.readFileSync(path.join(ROOT, 'build', 'deps.lock.json'), 'utf8'));
 const CACHE = path.join(ROOT, 'build', '.deps-cache');
 const offline = process.argv.includes('--offline');
-const DVPND_DIR = process.env.DVPND_DIR || path.join(os.homedir(), 'Desktop', 'devnet-dvpn-dvpnd-devnet', 'build');
+const DVPND_DIR = process.env.DVPND_DIR || path.join(os.homedir(), 'dvpnd', 'build');
 const archArg = process.argv.indexOf('--arch');
 const ARCH = archArg > 0 ? process.argv[archArg + 1] : process.arch;
 if (!['x64', 'arm64'].includes(ARCH)) throw new Error(`--arch must be x64 or arm64 (got ${ARCH})`);

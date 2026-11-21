@@ -17,6 +17,7 @@ import { connect, adoptRunningSession, sessionStateUnknown } from '../main/servi
 import { readSettlements, runSettlement } from '../main/services/settlement';
 import { refreshSubscriptions, roster } from '../main/services/plans';
 import { daemonInfo, initDevice, deviceRecord } from '../main/daemon/manager';
+import { readOtherWallet, switchNeeded, SWITCH_NEXT, switchAlsoNext, switchMessage } from './wallet-mismatch';
 import { launchdState, LAUNCHD_LABEL, LAUNCHD_PLIST } from '../main/daemon/launchd-state';
 import { launchdStartNext } from '../core/daemon/darwin-launchd';
 import { rivalVpns } from '../main/system/tunnels';
@@ -420,6 +421,9 @@ const upOnce: Cmd = async (a, o) => {
   // Idempotent: a live session that matches the request is answered, never paid for twice.
   await adoptRunningSession();
   const already = snapshot().session;
+  // rc9-d: set up for another wallet (and nothing live to answer): the switch, never the service gates' loop.
+  const otherW = already ? null : readOtherWallet(owner);
+  if (otherW) throw switchNeeded(otherW, owner);
   // E-35: a session the server stopped serving still reads "live" for a while, with the direct address as its exit.
   // It is never reused: that server is skipped and the connect below switches away from it.
   const liveIp = already ? await exitIp(already.id) : null;
@@ -821,7 +825,9 @@ const status: Cmd = async (a, o) => {
   const stoppedAlso = blocked ? `then ${CLI} agent up --yes to reconnect, or ${CLI} agent down --yes to close the deposit` : SERVER_STOPPED_ALSO;
   // macOS twin of Linux RC8 W47 (T-C row 16): installed but stopped is one launchctl line, not a reinstall.
   const startNext = serviceDown ? launchdStartNext(await launchdState(), LAUNCHD_LABEL, LAUNCHD_PLIST) : null;
-  const next0 = stopped ? stoppedNext : reconnectNext ? reconnectNext : serviceDown ? startNext ?? nextFor('daemon-missing', process.platform) : dNext ?? statusNext({ owner, wallet, live: connected, reachable: d.reachable, device: d.device, blocked, noWalletNext: missing?.next, reconnectNext: null });
+  // rc9-d: set up for another wallet: the switch comes before the service (installing it again loops).
+  const otherW = !connected && !reconnecting && !stopped ? readOtherWallet(owner) : null;
+  const next0 = stopped ? stoppedNext : reconnectNext ? reconnectNext : otherW ? SWITCH_NEXT : serviceDown ? startNext ?? nextFor('daemon-missing', process.platform) : dNext ?? statusNext({ owner, wallet, live: connected, reachable: d.reachable, device: d.device, blocked, noWalletNext: missing?.next, reconnectNext: null });
   // M-S: the chmod comes first, except where the way out of a block does (the internet back before anything else).
   // CLOCK-UNKNOWN (rc9-c, AC-WIN L3 w11): a read that missed the budget (public RPC 429) or found no chain time was
   // dropped silently, so status looked like a checked clock. Say it was not checked; never claim a skew.
@@ -837,6 +843,7 @@ const status: Cmd = async (a, o) => {
     held: wallet ? tdvpn(wallet.userBalance) : null, heldBase: wallet ? String(wallet.userBalance) : null, device: d.device, service: d.reachable,
     connected, ...(connected && live ? { session: live.id, node: live.node, protocol: live.service, spent: tdvpn(live.spent), spentBase: String(live.spent), exitIp: ip?.ip ?? null, wholeDevice: sessionWholeDevice(live), socks: live.proxyEndpoint && !isAndroid() ? `socks5h://${live.proxyEndpoint}` : null } : {}),
     ...(stopped ? { code: 'server-stopped', message, nodeStopped: stopped, alsoNext: stoppedAlso } : {}),
+    ...(otherW ? { code: 'wallet-switch-needed', serviceWallet: otherW, message: switchMessage(otherW, owner!), alsoNext: switchAlsoNext(otherW) } : {}),
     ...(deposits?.length && depositRows(deposits).length ? { deposits: depositRows(deposits) } : {}),
     ...(reconnecting && live ? { reconnecting: true, session: live.id, node: live.node, protocol: live.service, alsoNext: RECONNECT_BLOCKED_ALSO } : {}),
     ...(blocked ? { blocked: true } : {}), next,

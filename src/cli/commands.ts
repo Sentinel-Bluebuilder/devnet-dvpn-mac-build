@@ -20,7 +20,7 @@ import { clearSystemProxy } from '../main/system/proxy';
 import { readSettlements, runSettlement, withdraw } from '../main/services/settlement';
 import { refreshPlans, refreshSubscriptions, roster, subscribe, closeSub } from '../main/services/plans';
 import { recentNodes, fundChannel, withChainStatus } from '../main/services/activity';
-import { daemon, daemonInfo, registerDevice, detectDevice, deviceRecord, deviceHomeGone, startServiceIfStopped, discardHalfFinishedSetup } from '../main/daemon/manager';
+import { daemon, daemonInfo, registerDevice, detectDevice, deviceRecord, deviceHomeGone, startServiceIfStopped, discardHalfFinishedSetup, serviceOwner, installService } from '../main/daemon/manager';
 import { DaemonError } from '../core/daemon/client';
 import { getDaemonSettings } from '../main/daemon/settings';
 import { getSettings } from '../main/system/settings';
@@ -294,7 +294,20 @@ const device: Cmd = async (a, o) => {
     if (!owner) throw walletMissingError();
     const recorded = deviceRecord()?.owner;
     if (!recorded) throw cliErr('no-device', `${CLI_NAME} device setup --yes`, `${here('This')} is not set up for any wallet yet: run "device setup --yes" instead.`);
-    if (recorded === owner) { o.print(`${here('This')} is already set up for ${owner}: nothing to switch.`, { switched: false, owner }); return; }
+    if (recorded === owner) {
+      // rc9-c OWNER-SYNC (AC-WIN w11): the record names this wallet, but the installed service still runs for another
+      // (same device key, E-ST). dvpnd checks the grant against that owner and crash-looped: point the service here.
+      const svcOwner = serviceOwner();
+      if (svcOwner && svcOwner !== owner) {
+        confirm(a, o, `The VPN service on ${here('this')} still runs for ${svcOwner}, while this device is set up for ${owner}. Point the service at ${owner} (same device key, nothing is paid; one administrator prompt).`, { serviceOwner: svcOwner, owner });
+        const ri = await installService();
+        if (!ri.ok) throw cliErr(ri.code ?? 'install-failed', `${CLI_NAME} daemon doctor --json`, `${ri.error ?? 'The service step failed with no message.'} Nothing was paid.`);
+        o.print(`The VPN service on ${here('this')} now runs for ${owner}.`, { switched: true, from: svcOwner, owner, sameDevice: true, next: `${CLI_NAME} agent status --json` });
+        return;
+      }
+      o.print(`${here('This')} is already set up for ${owner}: nothing to switch.`, { switched: false, owner });
+      return;
+    }
     // rc.3.1 F2 (Windows run): each switch makes a new device and leaves its fee float on the old one. Sentence from UI-ENGINE.
     confirm(a, o, `Switch ${here('this')} from ${recorded} to ${owner}. This sets ${here('this')} up as a new device for the loaded wallet, which pays about 0.05 SOL of fee float for it. About 0.05 SOL of fee float stays on the previous device and cannot be sent back yet. Deposits made with the previous device stay refundable: settle list shows them.`, { from: recorded, to: owner, floatSol: '0.05' });
     const r = await switchWallet(owner, recorded, '0', true);

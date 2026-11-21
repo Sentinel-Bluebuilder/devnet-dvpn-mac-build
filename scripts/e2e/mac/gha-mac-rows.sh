@@ -116,7 +116,10 @@ row_pf_restore() {
   if [ "$up1" = 0 ]; then
     sudo pkill -9 -x sentinel-dvpnd >"$EV/pf_kill.out" 2>&1 || sudo killall -9 sentinel-dvpnd >>"$EV/pf_kill.out" 2>&1
     sleep 3
+    # PF-DEAD-3 evidence: launchd's view of the killed service (state, runs, last exit, any throttled spawn) and when
+    { date -u +%T; sudo launchctl print "system/$LD_LABEL" 2>&1 | grep -E "state =|runs =|last exit|spawn|throttle" ; } >"$EV/pf_launchd.out"
     run pf_restore1 daemon restore-network
+    { date -u +%T; sudo launchctl print "system/$LD_LABEL" 2>&1 | grep -E "state =|runs =|last exit|spawn|throttle" ; } >>"$EV/pf_launchd.out"
     wait_service 60 >/dev/null
     att_after=$(pf_attach_lines); anc_after=$(pf_anchor_rules)
     curl -s --max-time 20 https://api.ipify.org >/dev/null && net=yes || net=no
@@ -151,7 +154,7 @@ runb() { # runb <row> <cli args…>: like run, as wallet B in its own data dir
   rm -f "$EV/$row.err"
 }
 row_wallet_switch() {
-  local a b dev0 devb mp upb downb upa back tdv sol keep rc_final
+  local a b dev0 devb mp upb downb upa back tdv sol keep rc_final nb na
   [ "$(get up_rc)" = 0 ] || { RC=1; record wallet_switch DIFFERS "skipped: the plain agent up failed"; return; }
   a=$("$CLI" agent status --json 2>/dev/null | jq -r '.address // empty')
   dev0=$("$CLI" agent status --json 2>/dev/null | jq -r '.device // empty')
@@ -161,32 +164,60 @@ row_wallet_switch() {
   b=$(echo "$OUT" | jq -r '[.. | objects | .address? // empty] | .[0] // empty' 2>/dev/null)
   if [ -z "$b" ] || [ ! -f "$SW_KEY" ]; then RC=1; record wallet_switch DIFFERS "wallet B could not be created (see sw_create.out)"; rm -rf "$SW_DATA" "$HOME/ddv-key-b"; return; fi
   chmod 600 "$SW_KEY"
+  # until its funds are back with A, a copy waits in $LEFTOVER (the EXIT trap / if: always() step empties it, then deletes)
+  (umask 077; cp -p "$SW_KEY" "$LEFTOVER/b-$b.json")
   gap; run sw_fund_sol wallet send --to "$b" --sol "$SWITCH_SOL" --yes
   gap; run sw_fund_tdvpn wallet send --to "$b" --tdvpn "$SWITCH_TDVPN" --yes
   mp=$(get max_price)
+  # rc9-d (lead): start from agent status and follow its printed next (setup steps only), as a user or an agent would.
+  # The service runs for A, so B's status names `device switch --yes` (wallet-switch-needed); it points the service at B.
+  gap; follow_nexts runb sw_b; nb=$FOLLOWED
+  wait_service 90 >/dev/null
   gap
   if [ -n "$mp" ]; then runb sw_up_b agent up --max-price "$mp" --yes; else runb sw_up_b agent up --yes; fi; upb=$RC
   devb=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" agent status --json 2>/dev/null | jq -r '.device // empty')
   gap; runb sw_down_b agent down --yes; downb=$RC
-  # back to A: its data dir still records the device for A; the install step sets the service owner to A again
-  run sw_install_a daemon install --yes; back=$RC
+  # back to A: now the service runs for B, so A's status names the switch back; follow it the same way
+  gap; follow_nexts run sw_a; na=$FOLLOWED; back=$FOLLOW_RC
   wait_service 90 >/dev/null
   gap
   if [ -n "$mp" ]; then run sw_up_a agent up --max-price "$mp" --yes; else run sw_up_a agent up --yes; fi; upa=$RC
   gap; run sw_down_a agent down --yes
-  # B's funds back to A: all its tDVPN, and its SOL less 0.003 for the two fees
+  # B's funds back to A: all its tDVPN, then all its SOL less the fee (--allow-empty: runs 44843609674 + 44846196847 were
+  # refused low-sol-after and stranded the SOL). sweep_leftovers re-checks the balance before the key is deleted.
   tdv=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" agent status --json 2>/dev/null | jq -r '.tdvpn // "0"')
   if [ -n "$tdv" ] && [ "$tdv" != 0 ]; then gap; runb sw_back_tdvpn wallet send --to "$a" --tdvpn "$tdv" --yes; fi
   sol=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" agent status --json 2>/dev/null | jq -r '.sol // "0"')
-  keep=$(echo "$sol" | awk '{ v = $1 - 0.003; if (v > 0) printf "%.6f", v; else print "" }')
-  if [ -n "$keep" ]; then gap; runb sw_back_sol wallet send --to "$a" --sol "$keep" --yes; fi
-  { echo "owner A=$a wallet B=$b"; echo "device before=$dev0 device as B=$devb"; echo "up_b=$upb down_b=$downb install_a=$back up_a=$upa";
+  keep=$(echo "$sol" | awk '{ v = $1 - 0.00001; if (v > 0) printf "%.9f", v; else print "" }')
+  if [ -n "$keep" ]; then gap; runb sw_back_sol wallet send --to "$a" --sol "$keep" --allow-empty --yes; fi
+  { echo "owner A=$a wallet B=$b"; echo "device before=$dev0 device as B=$devb"; echo "B followed: ${nb:-nothing}"; echo "A followed: ${na:-nothing}";
+    echo "up_b=$upb down_b=$downb switch_back_a=$back up_a=$upa";
     echo "B left: tdvpn sent back=${tdv:-0} sol sent back=${keep:-0}"; } >"$EV/switch.out"
   rm -P "$SW_KEY" 2>/dev/null; rm -rf "$SW_DATA" "$HOME/ddv-key-b"
   rc_final=$upb; RC=$rc_final
-  if [ "$upb" = 0 ] && [ -n "$dev0" ] && [ "$devb" = "$dev0" ] && [ "$back" = 0 ] && [ "$upa" = 0 ]; then
-    record wallet_switch PASS "fresh data dir + wallet $b on owner $a's service: same device $dev0 adopted, B connected; daemon install back to A, A connected"
-  else record wallet_switch DIFFERS "up_b=$upb device_b='$devb' (was '$dev0') install_a=$back up_a=$upa (see switch.out, sw_up_b.out)"; fi
+  if [ "$upb" = 0 ] && [ -n "$dev0" ] && [ "$devb" = "$dev0" ] && [ "$back" = 0 ] && [ "$upa" = 0 ] && [[ "$nb" == *'device switch'* ]] && [[ "$na" == *'device switch'* ]]; then
+    record wallet_switch PASS "fresh data dir + wallet $b on owner $a's service, following agent status: B ${nb}then connected on the same device $dev0; A ${na}then connected"
+  else record wallet_switch DIFFERS "B followed '${nb:-nothing}' up_b=$upb device_b='$devb' (was '$dev0'); A followed '${na:-nothing}' back=$back up_a=$upa (see switch.out)"; fi
+}
+
+# follow_nexts <run|runb> <prefix>: from agent status, run each printed next while it is a setup step (the next of a
+# step that failed too, e.g. no-device -> device setup), at most 6 steps and never the same step twice in a row;
+# sets FOLLOWED ("[step -> exit] ...") and FOLLOW_RC (the last step's exit, 0 when none was needed).
+setup_step() { local c=${1%%, then *}; c=${c#"$CLI "}; c=${c#devnet-dvpn }
+  case "$c" in 'device switch --yes'|'daemon install --yes'|'device setup --yes') printf '%s' "$c" ;; esac; }
+follow_nexts() {
+  local runner=$1 p=$2 i cmd prev=''
+  FOLLOWED=''; FOLLOW_RC=0
+  "$runner" "${p}_status0" agent status
+  for i in 1 2 3 4 5 6; do
+    cmd=$(setup_step "$(echo "$OUT" | jq -r '.next // .action // empty' 2>/dev/null)")
+    [ -n "$cmd" ] || return 0
+    [ "$cmd" != "$prev" ] || { FOLLOW_RC=1; FOLLOWED="$FOLLOWED[loop: $cmd again] "; return 0; }
+    gap; "$runner" "${p}_next$i" $cmd; FOLLOW_RC=$RC; FOLLOWED="$FOLLOWED[$cmd -> $RC] "; prev=$cmd
+    # a failed step's own next is followed; after a step that worked, status says what comes next
+    if [ "$RC" = 0 ]; then "$runner" "${p}_status$i" agent status; prev=''; fi
+  done
+  FOLLOW_RC=1; FOLLOWED="$FOLLOWED[stopped after 6] "
 }
 
 # ─── C1 / C2 (AC-MAC-1 P2-1 / P2-2) by behaviour, as root: a planted link is refused, its target untouched ───
