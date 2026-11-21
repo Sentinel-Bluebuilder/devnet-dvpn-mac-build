@@ -143,7 +143,7 @@ row_pf_restore() {
 # Before b1750da48 the service kept owner = A and B never connected. Spend: A sends B SWITCH_SOL + SWITCH_TDVPN; B
 # opens one deposit; at the end B sends its tDVPN and spare SOL back to A. B's key never leaves the runner and is
 # deleted at the end; only its ADDRESS is kept in switch.out (its closing deposit's refund is lost with it).
-SWITCH_SOL=${SWITCH_SOL:-0.04}; SWITCH_TDVPN=${SWITCH_TDVPN:-2}
+SWITCH_SOL=${SWITCH_SOL:-0.08}; SWITCH_TDVPN=${SWITCH_TDVPN:-2}
 runb() { # runb <row> <cli args…>: like run, as wallet B in its own data dir
   local row=$1; shift
   OUT=$(DVPN_KEYFILE="$SW_KEY" DVPN_DATA_DIR="$SW_DATA" "$CLI" "$@" --json 2>"$EV/$row.err"); RC=$?
@@ -195,7 +195,9 @@ row_wallet_switch() {
 SVC_ROOT=${SVC_ROOT:-/Library/Application Support/sentinel-dvpn}
 SCRIPTS=${SCRIPTS:-$APP/Contents/Resources/resources/scripts}
 sha_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
-result_detail() { jq -r '.detail // .status // empty' "$1" 2>/dev/null; }
+# write_result (_lib.sh) writes only to a .../devnet-dvpn-<x>/result.json path (run 44843609674: "refusing result path"), so the
+# rows use that shape; the script's own stderr line is the fallback (it says the same thing).
+result_detail() { local d; d=$(sudo -n cat "$1" 2>/dev/null | jq -r '.error // .detail // .status // empty' 2>/dev/null); [ -n "$d" ] || d=$(grep -v '^refusing result path' "$2" 2>/dev/null | tail -1); printf '%s' "$d"; }
 row_c1_setup_links() {
   local dvpnd w tgt t0 t1 res1 res2 rc1 rc2 d1 d2 home="$SVC_ROOT/c9"
   dvpnd=$(find "$APP/Contents/Resources/resources" -name sentinel-dvpnd -type f 2>/dev/null | head -1)
@@ -204,16 +206,16 @@ row_c1_setup_links() {
   w=$(mktemp -d "$HOME/c1.XXXXXX"); tgt="$w/target.txt"; echo "root must never write here" >"$tgt"; t0=$(sha_of "$tgt")
   # (a) a link INSIDE the staged home (device.pub -> the target)
   mkdir -p "$w/a/daemon-staging"; echo 'owner = "x"' >"$w/a/daemon-staging/config.toml"; ln -s "$tgt" "$w/a/daemon-staging/device.pub"
-  res1=$(mktemp "$w/r1.XXXXXX")
+  mkdir -p "$w/devnet-dvpn-c1a"; res1="$w/devnet-dvpn-c1a/result.json"
   sudo -n /bin/bash "$SCRIPTS/setup-daemon.sh" --Dvpnd "$dvpnd" --Staging "$w/a/daemon-staging" --DaemonHome "$home" \
     --BinRoot "$(dirname "$dvpnd")" --Group sentinel-dvpn --Service sentinel-dvpnd --Instance c9 --User "$(id -un)" --Result "$res1" >"$EV/c1_a.out" 2>&1; rc1=$?
-  d1=$(result_detail "$res1")
+  d1=$(result_detail "$res1" "$EV/c1_a.out")
   # (b) the staging folder itself is a link (to a folder holding a config)
   mkdir -p "$w/real/daemon-staging"; echo 'owner = "x"' >"$w/real/daemon-staging/config.toml"; mkdir -p "$w/b"; ln -s "$w/real/daemon-staging" "$w/b/daemon-staging"
-  res2=$(mktemp "$w/r2.XXXXXX")
+  mkdir -p "$w/devnet-dvpn-c1b"; res2="$w/devnet-dvpn-c1b/result.json"
   sudo -n /bin/bash "$SCRIPTS/setup-daemon.sh" --Dvpnd "$dvpnd" --Staging "$w/b/daemon-staging" --DaemonHome "$home" \
     --BinRoot "$(dirname "$dvpnd")" --Group sentinel-dvpn --Service sentinel-dvpnd --Instance c9 --User "$(id -un)" --Result "$res2" >"$EV/c1_b.out" 2>&1; rc2=$?
-  d2=$(result_detail "$res2")
+  d2=$(result_detail "$res2" "$EV/c1_b.out")
   t1=$(sha_of "$tgt")
   sudo -n rm -rf -- "$home"; rm -rf -- "$w"
   { echo "a: rc=$rc1 detail=$d1"; echo "b: rc=$rc2 detail=$d2"; echo "target sha before=$t0 after=$t1"; } >>"$EV/c1_setup_links.out"
@@ -229,9 +231,9 @@ row_c2_apply_link() {
   c0=$(sudo -n shasum -a 256 "$home/config.toml" | cut -d' ' -f1)
   w=$(mktemp -d "$HOME/c2.XXXXXX"); tgt="$w/target.txt"; echo "root must never read this into a config" >"$tgt"; t0=$(sha_of "$tgt")
   mkdir -p "$w/staged"; ln -s "$tgt" "$w/staged/config.toml"
-  res=$(mktemp "$w/r.XXXXXX")
+  mkdir -p "$w/devnet-dvpn-c2"; res="$w/devnet-dvpn-c2/result.json"
   sudo -n /bin/bash "$SCRIPTS/apply-daemon-config.sh" --Staged "$w/staged" --DaemonHome "$home" --Result "$res" >"$EV/c2.out" 2>&1; rc=$?
-  d=$(result_detail "$res"); t1=$(sha_of "$tgt"); c1=$(sudo -n shasum -a 256 "$home/config.toml" | cut -d' ' -f1)
+  d=$(result_detail "$res" "$EV/c2.out"); t1=$(sha_of "$tgt"); c1=$(sudo -n shasum -a 256 "$home/config.toml" | cut -d' ' -f1)
   sudo -n rm -rf -- "$home"; rm -rf -- "$w"
   { echo "rc=$rc detail=$d"; echo "target sha before=$t0 after=$t1"; echo "test config sha before=$c0 after=$c1"; } >>"$EV/c2_apply_link.out"
   RC=$rc

@@ -19,9 +19,14 @@ on:
         description: 'Run the live job after build'
         type: boolean
         default: true
+      artifact_run:
+        description: 'Live only: install the .dmg/.zip of this earlier run id (its build is the one published); empty = build here'
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  actions: read   # live from an earlier run: download-artifact reads that run's artifacts
 
 env:
   RC4_REPO: Sentinel-Bluebuilder/sentinel-solana-dvpn-macos
@@ -44,6 +49,8 @@ defaults:
 
 jobs:
   build:
+    # rc.9 (lead): a live-only re-run installs an earlier run's packages, so the published files are the tested ones.
+    if: ${{ inputs.artifact_run == '' }}
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -154,7 +161,7 @@ jobs:
 
   live:
     needs: build
-    if: ${{ inputs.live }}
+    if: ${{ always() && inputs.live && (needs.build.result == 'success' || (inputs.artifact_run != '' && needs.build.result == 'skipped')) }}
     runs-on: macos-15
     # Shared with macos-pathb.yml: never two devnet chain tests at once (sequential chain rule).
     concurrency:
@@ -168,6 +175,14 @@ jobs:
         with:
           name: macos-arm64
           path: pkg
+          run-id: ${{ inputs.artifact_run || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Packages under test
+        run: |
+          echo "### Packages under test (from run ${{ inputs.artifact_run || github.run_id }})" >> "$GITHUB_STEP_SUMMARY"
+          { echo '```'; cat pkg/dist/SHA256SUMS; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cat pkg/dist/SHA256SUMS
 
       - name: Install the .dmg (sudo)
         run: |

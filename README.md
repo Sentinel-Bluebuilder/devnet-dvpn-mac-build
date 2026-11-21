@@ -57,9 +57,8 @@ Devnet dVPN is released under the Sentinel dVPN License (see [`LICENSE`](LICENSE
 open-source [Sentinel](https://sentinel.co) protocol.
 
 The app and its packages bundle third-party software — the Sentinel daemon, the Xray / Hysteria /
-V2Ray transports, the WireGuard / AmneziaWG / OpenVPN tunnel tools, GNU Bash, and fonts — each under
-its own license. These are listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md); a
-per-release copy with exact versions, SHA-256 sums and the Xray modification patch is generated to
-`build/THIRD-PARTY-NOTICES.txt` and shipped inside the app. The GPL components (wireguard-tools,
-OpenVPN, bash, amneziawg-tools) carry a **written offer for complete corresponding source** in that
-file.
+V2Ray transports, and fonts — each under its own license. These are listed in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md); a per-release copy with exact versions, SHA-256
+sums and the Xray modification patch (`docs/patches/xray-0001-darwin-find-process.patch`) is
+generated to `build/THIRD-PARTY-NOTICES.txt` and shipped inside the app. The VPN tunnel tools are not
+in the packages: **Repair drivers** installs them from Homebrew, each under its own license.

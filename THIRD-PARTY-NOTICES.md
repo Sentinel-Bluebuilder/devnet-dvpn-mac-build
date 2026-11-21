@@ -2,8 +2,8 @@
 
 Devnet dVPN for macOS (Sentinel dVPN License, see `LICENSE`) is a client for the open-source **Sentinel** protocol.
 The application and its `.dmg`/`.zip` packages bundle the third-party software listed below, each
-under its own license. Source for every component is available at the link given; for the GPL
-components see **Written offer for source** at the end.
+under its own license. Source for every component is available at the link given. The packages
+carry no GPL program: the VPN tunnel tools below are installed from Homebrew, not bundled.
 
 A machine-generated, per-release copy of the notices for the bundled protocol binaries (with the
 exact versions, SHA-256 sums and the Xray modification patch) is written to
@@ -29,9 +29,11 @@ The complete dependency notice for every Go module compiled into `sentinel-dvpnd
 | V2Ray-core | 5.53.0 | MIT | https://github.com/v2fly/v2ray-core/tree/v5.53.0 |
 | `geoip.dat`, `geosite.dat` | shipped with Xray | MIT (data files, v2fly/Loyalsoldier) | https://github.com/Loyalsoldier/v2ray-rules-dat |
 
-## VPN tunnel tools (bundled binaries)
+## VPN tunnel tools (installed from Homebrew, not bundled)
 
-Installed root-owned into the app's trusted tool directory at setup; see `resources/scripts/install-deps.sh`.
+The `.dmg`/`.zip` packages do not contain these programs. **Repair drivers** installs them on your Mac
+from Homebrew (AmneziaWG is built from the pinned source tags below), and setup copies them root-owned
+into the service's tool folder; see `resources/scripts/install-deps.sh`. Each stays under its own license.
 
 | Component | License | Source |
 |-----------|---------|--------|
@@ -59,13 +61,7 @@ Installed root-owned into the app's trusted tool directory at setup; see `resour
 The complete list of every npm dependency and its license is generated into
 `build/THIRD-PARTY-NOTICES.txt` at package time.
 
-## Written offer for source (GPL components)
+## GPL programs
 
-The bundled **wireguard-tools**, **OpenVPN**, **GNU Bash** and **AmneziaWG tools** are licensed under
-the GNU GPL. The complete corresponding source for the exact versions shipped is the upstream source
-at the tags/links above (this app builds those binaries from those pinned tags unmodified). In
-addition, for three years from the date you received a package, the Devnet dVPN contributors will,
-on request, provide the complete corresponding machine-readable source code for those GPL components
-for a charge no more than the cost of physically performing distribution. Send the request, naming
-the package version, through the project repository's issue tracker. This offer is valid to anyone
-who received the software.
+None is bundled. If a later package bundles one, `scripts/fetch-deps.mjs` adds the written offer
+for its source to the shipped `THIRD-PARTY-NOTICES.txt`.
